@@ -185,6 +185,8 @@
   <label class="toggle"><input type="checkbox" id="soundToggle" checked>声音</label>
   <label class="toggle"><input type="checkbox" id="notifyToggle" checked>桌面通知</label>
   <label class="toggle"><input type="checkbox" id="flashToggle" checked>标题闪烁</label>
+  <button id="grantNotif" class="primary" hidden>授权通知</button>
+  <span id="notifStatus" class="status error" hidden>通知权限未授权</span>
 </div>
 
 <main id="messages">
@@ -219,35 +221,85 @@ function saveConfig() {
   localStorage.setItem("pr.flash", $("flashToggle").checked ? "1" : "0");
 }
 
-// 提示音：Web Audio API 生成简单 beep
+// 提示音:Web Audio API 生成简单 beep
+// 注意:AudioContext 必须在用户手势(点击/按键)里创建或 resume,
+// 否则 Chrome/Safari 会保持 suspended 状态,osc.start() 静默失败。
 let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+  }
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume().catch(err => console.warn("[push-relay] AudioContext resume failed:", err));
+  }
+  return audioCtx;
+}
 function playBeep() {
   if (!$("soundToggle").checked) return;
+  const ctx = ensureAudio();
+  if (!ctx) return;
   try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
     osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    gain.connect(ctx.destination);
     osc.frequency.value = 880;
     osc.type = "sine";
-    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
     osc.start();
-    osc.stop(audioCtx.currentTime + 0.3);
-  } catch (e) { /* ignore */ }
+    osc.stop(ctx.currentTime + 0.3);
+  } catch (e) {
+    console.warn("[push-relay] playBeep failed:", e);
+  }
 }
 
 // 浏览器原生通知
 function showNotification(title, body) {
   if (!$("notifyToggle").checked) return;
-  if (!("Notification" in window)) return;
+  if (!("Notification" in window)) {
+    console.warn("[push-relay] 当前浏览器不支持 Notification API");
+    return;
+  }
+  const fire = () => new Notification(title, { body, icon: "🔔", silent: false });
   if (Notification.permission === "granted") {
-    new Notification(title, { body, icon: "🔔" });
-  } else if (Notification.permission !== "denied") {
+    fire();
+  } else if (Notification.permission === "default") {
     Notification.requestPermission().then(p => {
-      if (p === "granted") new Notification(title, { body, icon: "🔔" });
+      updateNotifStatus();
+      if (p === "granted") fire();
     });
+  } else {
+    // denied:什么都不做,updateNotifStatus 会在工具栏提示
+  }
+  updateNotifStatus();
+}
+
+// 把通知权限状态显示到工具栏
+function updateNotifStatus() {
+  const banner = $("notifStatus");
+  const btn    = $("grantNotif");
+  if (!("Notification" in window)) {
+    banner.hidden = false;
+    banner.textContent = "当前浏览器不支持系统通知";
+    banner.className = "status error";
+    btn.hidden = true;
+    return;
+  }
+  const p = Notification.permission;
+  if (p === "granted") {
+    banner.hidden = true;
+    btn.hidden = true;
+  } else if (p === "denied") {
+    banner.hidden = false;
+    banner.textContent = "通知被拒绝 — 请在浏览器设置里允许";
+    banner.className = "status error";
+    btn.hidden = true;
+  } else {
+    banner.hidden = true;
+    btn.hidden = false;
   }
 }
 
@@ -416,24 +468,32 @@ function setStatus(cls, text) {
   el.textContent = text;
 }
 
-$("connect").onclick = connect;
+$("connect").onclick = () => { ensureAudio(); connect(); };
 $("disconnect").onclick = disconnect;
-$("clear").onclick = clearMessages;
-$("uri").onkeydown = e => { if (e.key === "Enter") connect(); };
-$("token").onkeydown = e => { if (e.key === "Enter") connect(); };
+$("clear").onclick = () => { ensureAudio(); clearMessages(); };
+$("grantNotif").onclick = () => {
+  ensureAudio();
+  if (!("Notification" in window)) return;
+  Notification.requestPermission().then(() => updateNotifStatus());
+};
+$("uri").onkeydown = e => { if (e.key === "Enter") { ensureAudio(); connect(); } };
+$("token").onkeydown = e => { if (e.key === "Enter") { ensureAudio(); connect(); } };
+// 任意一次用户点击/按键都把 AudioContext 解锁,避免 ws.onmessage 触发时被 suspend
+["click", "keydown"].forEach(ev => {
+  document.addEventListener(ev, () => ensureAudio(), { capture: true });
+});
 
 loadConfig();
+updateNotifStatus();
 
 // 自动连接（首次打开或刷新时）
 if ($("token").value && $("uri").value) {
   setTimeout(connect, 500);
 }
 
-// 进入页面时请求通知权限
-if ("Notification" in window && Notification.permission === "default") {
-  // 延迟一点请求，避免页面刚加载就弹窗
-  setTimeout(() => Notification.requestPermission(), 2000);
-}
+// 进入页面时不主动弹通知权限框,等用户第一次点 "连接" 或收到第一条消息时再请求,
+// 避免页面刚加载就弹窗惹人烦
+// (showNotification 内部已处理 permission === "default" 的情况)
 </script>
 </body>
 </html>
