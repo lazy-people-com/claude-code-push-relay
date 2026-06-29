@@ -176,6 +176,8 @@
     justify-content: center;
     z-index: 100;
   }
+  /* 兜底:避免 [hidden] 被 .modal 的 display: flex 覆盖,导致关闭按钮失效 */
+  [hidden] { display: none !important; }
   .modal-panel {
     background: var(--panel);
     border: 1px solid var(--border);
