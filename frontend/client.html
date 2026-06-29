@@ -251,6 +251,7 @@
   <label class="toggle"><input type="checkbox" id="notifyToggle" checked>桌面通知</label>
   <label class="toggle"><input type="checkbox" id="flashToggle" checked>标题闪烁</label>
   <button id="openTest" class="primary">🧪 测试</button>
+  <button id="fireTestNotif" hidden>测试通知</button>
   <button id="grantNotif" class="primary" hidden>授权通知</button>
   <span id="notifStatus" class="status error" hidden>通知权限未授权</span>
 </div>
@@ -366,7 +367,17 @@ function showNotification(title, body) {
     console.warn("[push-relay] 当前浏览器不支持 Notification API");
     return;
   }
-  const fire = () => new Notification(title, { body, icon: "🔔", silent: false });
+  // 注意:icon 必须是 URL,不能用 emoji (macOS Chrome 拿到无效 icon 会静默丢弃整条通知)
+  const fire = () => {
+    try {
+      const n = new Notification(title, { body, silent: false });
+      n.onclick = () => { window.focus(); n.close(); };
+      return n;
+    } catch (e) {
+      console.error("[push-relay] new Notification 抛异常:", e);
+      return null;
+    }
+  };
   if (Notification.permission === "granted") {
     fire();
   } else if (Notification.permission === "default") {
@@ -380,29 +391,61 @@ function showNotification(title, body) {
   updateNotifStatus();
 }
 
+// 直接试一次通知 — 用来排查是 OS/系统设置问题,还是消息流程触发问题
+function fireTestNotification() {
+  if (!("Notification" in window)) {
+    alert("当前浏览器不支持 Notification API");
+    return;
+  }
+  if (Notification.permission !== "granted") {
+    Notification.requestPermission().then(p => {
+      updateNotifStatus();
+      if (p === "granted") {
+        new Notification("push-relay 测试", { body: "如果你看到这条,说明系统通知 OK ✓" });
+      } else {
+        alert("通知权限未授权,请先点 '授权通知'");
+      }
+    });
+    return;
+  }
+  try {
+    const n = new Notification("push-relay 测试", {
+      body: "如果你看到这条,说明系统通知 OK ✓",
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch (e) {
+    alert("通知创建失败: " + e.message + "\n请检查 系统设置 → 通知 → 浏览器 是否允许");
+  }
+}
+
 // 把通知权限状态显示到工具栏
 function updateNotifStatus() {
   const banner = $("notifStatus");
   const btn    = $("grantNotif");
+  const test   = $("fireTestNotif");
   if (!("Notification" in window)) {
     banner.hidden = false;
     banner.textContent = "当前浏览器不支持系统通知";
     banner.className = "status error";
     btn.hidden = true;
+    test.hidden = true;
     return;
   }
   const p = Notification.permission;
   if (p === "granted") {
     banner.hidden = true;
     btn.hidden = true;
+    test.hidden = false;  // 权限 OK 时显示 "测试通知",用户可一键验证系统通知是否真的能弹出
   } else if (p === "denied") {
     banner.hidden = false;
     banner.textContent = "通知被拒绝 — 请在浏览器设置里允许";
     banner.className = "status error";
     btn.hidden = true;
+    test.hidden = true;
   } else {
     banner.hidden = true;
     btn.hidden = false;
+    test.hidden = true;
   }
 }
 
@@ -584,6 +627,7 @@ $("grantNotif").onclick = () => {
   if (!("Notification" in window)) return;
   Notification.requestPermission().then(() => updateNotifStatus());
 };
+$("fireTestNotif").onclick = () => { ensureAudio(); fireTestNotification(); };
 
 // ── 测试弹窗 ──
 function openTest()  { $("testModal").hidden = false; }
