@@ -320,7 +320,7 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
     try:
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
-                log(f"接收端发来: {msg.data}")
+                await _handle_ws_message(ws, msg.data)
     except Exception as e:
         log(f"WebSocket 异常: {e}")
     finally:
@@ -330,6 +330,87 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
             f"剩余 {len(clients)} 个"
         )
     return ws
+
+
+# 测试推送场景(供前端测试按钮触发,见 client.html)
+_TEST_SCENARIOS: dict[str, dict] = {
+    "tool-use": {
+        "type": "tool-use",
+        "content": "工具调用: Bash",
+        "tool": "Bash",
+        "tool_input": '{"command":"echo hello from test"}',
+        "task": "",
+        "stop_reason": "",
+    },
+    "stop": {
+        "type": "stop",
+        "content": "Claude Code 已停止",
+        "tool": "",
+        "tool_input": "",
+        "task": "",
+        "stop_reason": "completed",
+    },
+    "notification": {
+        "type": "notification",
+        "content": "权限确认",
+        "tool": "",
+        "tool_input": "",
+        "task": "需要用户授权",
+        "stop_reason": "",
+    },
+}
+
+
+async def _handle_ws_message(ws: web.WebSocketResponse, raw: str) -> None:
+    """处理接收端发来的 WS 消息。
+
+    目前仅识别客户端发起的测试推送请求:
+        {"action":"test","scenario":"tool-use|stop|notification"}
+    命中后合成一条 payload 广播给所有接收端(含发送者自己)。
+    其他消息只记录日志,不响应。
+    """
+    try:
+        cmd = json.loads(raw)
+    except Exception:
+        log(f"接收端发来 (非 JSON): {raw[:200]}")
+        return
+
+    if not isinstance(cmd, dict):
+        log(f"接收端发来 (非 dict): {raw[:200]}")
+        return
+
+    action = cmd.get("action")
+    if action != "test":
+        log(f"接收端发来 (未知 action): {raw[:200]}")
+        return
+
+    scenario = cmd.get("scenario", "notification")
+    case = _TEST_SCENARIOS.get(scenario)
+    if case is None:
+        log(f"测试场景不存在: {scenario}")
+        await ws.send_str(json.dumps({"ok": False, "error": f"unknown scenario: {scenario}"}))
+        return
+
+    if not clients:
+        await ws.send_str(json.dumps({"ok": False, "error": "没有接收端"}))
+        return
+
+    payload = json.dumps(
+        {
+            "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "source": "test",
+            "host": "test-pc",
+            **case,
+        },
+        ensure_ascii=False,
+    )
+    targets = list(clients)
+    results = await asyncio.gather(
+        *[c.send_str(payload) for c in targets], return_exceptions=True
+    )
+    sent = sum(1 for r in results if not isinstance(r, Exception))
+    log(f"测试推送 [{scenario}]: sent_to={sent}/{len(targets)}")
+    await ws.send_str(json.dumps({"ok": True, "scenario": scenario, "sent_to": sent}))
 
 
 async def notify_handler(request: web.Request) -> web.Response:

@@ -166,6 +166,69 @@
     0%, 100% { background: var(--bg); }
     50% { background: #422006; }
   }
+  /* ── 测试弹窗 ── */
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    min-width: 480px;
+    max-width: 92vw;
+    max-height: 86vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  }
+  .modal-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .modal-head h2 { font-size: 15px; font-weight: 600; }
+  .modal-hint {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+  .test-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .test-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 14px;
+    gap: 12px;
+  }
+  .test-info { flex: 1; min-width: 0; }
+  .test-type {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 2px;
+  }
+  .test-desc {
+    font-size: 11px;
+    color: var(--muted);
+    word-break: break-word;
+  }
+  .test-row button { flex-shrink: 0; min-width: 70px; }
+  .test-row.sent button { background: var(--accent); color: #111; }
 </style>
 </head>
 <body>
@@ -185,6 +248,7 @@
   <label class="toggle"><input type="checkbox" id="soundToggle" checked>声音</label>
   <label class="toggle"><input type="checkbox" id="notifyToggle" checked>桌面通知</label>
   <label class="toggle"><input type="checkbox" id="flashToggle" checked>标题闪烁</label>
+  <button id="openTest" class="primary">🧪 测试</button>
   <button id="grantNotif" class="primary" hidden>授权通知</button>
   <span id="notifStatus" class="status error" hidden>通知权限未授权</span>
 </div>
@@ -194,6 +258,43 @@
     点 "连接" 开始接收。Token 来自 <code>~/.zshrc</code> 里的 <code>PUSH_TOKEN</code>。
   </div>
 </main>
+
+<!-- 测试弹窗 -->
+<div id="testModal" class="modal" hidden>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <h2>🧪 消息测试</h2>
+      <button id="closeTest" class="danger">关闭</button>
+    </div>
+    <p class="modal-hint">
+      点 "推送" 后，服务器会合成一条对应类型的消息广播给所有接收端（含自己）。
+      用来验证声音/系统通知/UI 是否正常。
+    </p>
+    <div class="test-list">
+      <div class="test-row" data-scenario="tool-use">
+        <div class="test-info">
+          <div class="test-type">tool-use</div>
+          <div class="test-desc">模拟 Bash 工具调用（tool=Bash, tool_input=echo hello from test）</div>
+        </div>
+        <button class="primary test-btn">推送</button>
+      </div>
+      <div class="test-row" data-scenario="stop">
+        <div class="test-info">
+          <div class="test-type">stop</div>
+          <div class="test-desc">模拟 Claude Code 正常停止（stop_reason=completed）</div>
+        </div>
+        <button class="primary test-btn">推送</button>
+      </div>
+      <div class="test-row" data-scenario="notification">
+        <div class="test-info">
+          <div class="test-type">notification</div>
+          <div class="test-desc">模拟权限确认通知（task=需要用户授权）</div>
+        </div>
+        <button class="primary test-btn">推送</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -429,6 +530,11 @@ function connect() {
     let data;
     try { data = JSON.parse(ev.data); }
     catch { data = { content: ev.data }; }
+    // 服务器对测试请求的回执:{ok, scenario, sent_to} —— 不渲染成消息
+    if (data && typeof data === "object" && data.ok !== undefined && data.scenario) {
+      handleTestAck(data);
+      return;
+    }
     renderMessage(data);
     messageCount++;
     $("count").textContent = messageCount;
@@ -476,6 +582,56 @@ $("grantNotif").onclick = () => {
   if (!("Notification" in window)) return;
   Notification.requestPermission().then(() => updateNotifStatus());
 };
+
+// ── 测试弹窗 ──
+function openTest()  { $("testModal").hidden = false; }
+function closeTest() { $("testModal").hidden = true; }
+$("openTest").onclick = () => { ensureAudio(); openTest(); };
+$("closeTest").onclick = closeTest;
+$("testModal").addEventListener("click", e => {
+  if (e.target.id === "testModal") closeTest();  // 点遮罩关闭
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !$("testModal").hidden) closeTest();
+});
+// 服务器对测试请求的回执:{ok, scenario, sent_to} —— 弹一下让用户知道推了几台
+function handleTestAck(data) {
+  const row = document.querySelector(`.test-row[data-scenario="${data.scenario}"]`);
+  if (!row) return;
+  const btn = row.querySelector(".test-btn");
+  if (data.ok) {
+    btn.textContent = `已推 ${data.sent_to}`;
+    row.classList.add("sent");
+  } else {
+    btn.textContent = data.error || "失败";
+  }
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = "推送";
+    row.classList.remove("sent");
+  }, 1500);
+}
+document.querySelectorAll(".test-row").forEach(row => {
+  const btn = row.querySelector(".test-btn");
+  btn.onclick = () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      btn.textContent = "未连接";
+      setTimeout(() => { btn.textContent = "推送"; }, 1200);
+      return;
+    }
+    const scenario = row.dataset.scenario;
+    btn.disabled = true;
+    btn.textContent = "推送中";
+    ws.send(JSON.stringify({ action: "test", scenario }));
+    // 兜底:2s 没收到 ack 也恢复按钮(防服务器异常)
+    setTimeout(() => {
+      if (btn.disabled) {
+        btn.disabled = false;
+        btn.textContent = "推送";
+      }
+    }, 2000);
+  };
+});
 $("uri").onkeydown = e => { if (e.key === "Enter") { ensureAudio(); connect(); } };
 $("token").onkeydown = e => { if (e.key === "Enter") { ensureAudio(); connect(); } };
 // 任意一次用户点击/按键都把 AudioContext 解锁,避免 ws.onmessage 触发时被 suspend
