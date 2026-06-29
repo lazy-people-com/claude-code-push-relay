@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>push-relay Admin</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --panel: #242424;
+    --border: #333;
+    --text: #e0e0e0;
+    --muted: #888;
+    --accent: #4ade80;
+    --warn: #fbbf24;
+    --err: #f87171;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  /* ── 锁屏 ── */
+  #lock-screen {
+    max-width: 420px;
+    margin: 120px auto;
+    padding: 32px 28px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    text-align: center;
+  }
+  #lock-screen h2 { font-size: 18px; margin-bottom: 6px; }
+  #lock-screen p { color: var(--muted); font-size: 12px; margin-bottom: 20px; }
+  #master-input { width: 100%; margin-bottom: 12px; }
+  #lock-error { color: var(--err); font-size: 12px; min-height: 18px; margin-top: 8px; }
+
+  /* ── Admin 主面板 ── */
+  #admin-panel { display: none; }
+  header {
+    padding: 12px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  h1 { font-size: 16px; font-weight: 600; }
+  .who { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+  .toolbar {
+    padding: 12px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  input[type="text"], input[type="password"] {
+    background: #111;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+  }
+  input[type="text"] { flex: 1; min-width: 200px; }
+  button {
+    background: var(--border);
+    color: var(--text);
+    border: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  button:hover:not(:disabled) { background: #444; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.primary { background: #166534; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #15803d; }
+  button.danger { background: #7f1d1d; color: #fff; }
+  button.danger:hover:not(:disabled) { background: #991b1b; }
+  button.ghost { background: transparent; border: 1px solid var(--border); }
+
+  main { padding: 16px 20px; }
+
+  /* ── Token 表格 ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    padding: 10px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  td.mono, th.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  td .role-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+  }
+  .role-master { background: #7f1d1d; color: #fca5a5; }
+  .role-user   { background: #1e3a8a; color: #93c5fd; }
+  .status-active { color: var(--accent); font-size: 11px; }
+  .status-revoked { color: var(--muted); font-size: 11px; text-decoration: line-through; }
+  td.actions { display: flex; gap: 6px; }
+
+  /* ── 创建表单 ── */
+  #new-form {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  #new-form h3 { font-size: 13px; margin-bottom: 12px; }
+  .form-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .form-row label { font-size: 12px; color: var(--muted); min-width: 70px; }
+  .form-row select {
+    background: #111;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  /* ── 一次性 Secret Modal ── */
+  #secret-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  #secret-modal.show { display: flex; }
+  #secret-modal .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 560px;
+    width: 90%;
+  }
+  #secret-modal h3 { color: var(--warn); font-size: 15px; margin-bottom: 8px; }
+  #secret-modal p { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+  #secret-value {
+    display: block;
+    background: #000;
+    color: var(--accent);
+    padding: 12px;
+    border-radius: 4px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    word-break: break-all;
+    margin-bottom: 12px;
+  }
+  #secret-modal .actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 10px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 200;
+    animation: slideUp 0.2s ease-out;
+  }
+  .toast.error { border-color: var(--err); color: var(--err); }
+  .toast.ok    { border-color: var(--accent); color: var(--accent); }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<!-- 锁屏 -->
+<div id="lock-screen">
+  <h2>🔐 push-relay Admin</h2>
+  <p>输入 master token 解锁</p>
+  <input id="master-input" type="password" placeholder="pr_master_***" autocomplete="off">
+  <button id="unlock" class="primary" style="width:100%">解锁</button>
+  <div id="lock-error"></div>
+</div>
+
+<!-- Admin 面板 -->
+<div id="admin-panel">
+  <header>
+    <h1>🔐 push-relay Token 管理</h1>
+    <span class="who" id="who"></span>
+    <button id="lock-again" class="ghost">🔒 锁定</button>
+  </header>
+
+  <div class="toolbar">
+    <button id="new-btn" class="primary">+ 新建 Token</button>
+    <button id="refresh">刷新</button>
+  </div>
+
+  <main>
+    <div id="new-form">
+      <h3>新建 Token</h3>
+      <div class="form-row">
+        <label>名称</label>
+        <input type="text" id="new-name" placeholder="如: home-mac-terminal">
+      </div>
+      <div class="form-row">
+        <label>角色</label>
+        <select id="new-role">
+          <option value="user">user (普通推送)</option>
+          <option value="master">master (管理权限)</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <button id="new-submit" class="primary">创建</button>
+        <button id="new-cancel" class="ghost">取消</button>
+        <span id="new-err" style="color: var(--err); font-size: 12px; margin-left: 8px;"></span>
+      </div>
+    </div>
+
+    <table id="token-table">
+      <thead>
+        <tr>
+          <th>名称</th>
+          <th>角色</th>
+          <th class="mono">前缀</th>
+          <th>创建时间</th>
+          <th>最近使用</th>
+          <th>状态</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="token-tbody">
+        <tr><td colspan="7" class="empty">加载中...</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+
+<!-- 一次性 Secret Modal -->
+<div id="secret-modal">
+  <div class="card">
+    <h3>⚠️ 新 Token 明文(仅此一次)</h3>
+    <p>请立即复制保存。关闭后无法再次查看,只能重新创建。</p>
+    <code id="secret-value"></code>
+    <div class="actions">
+      <button id="copy-secret">📋 复制</button>
+      <button id="ack-secret" class="primary">我已保存,关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// sessionStorage: 关闭 tab 自动清除,降低 token 泄露风险
+const STORAGE_KEY = "pr.admin.master";
+
+function getMaster() { return sessionStorage.getItem(STORAGE_KEY) || ""; }
+function setMaster(t) { sessionStorage.setItem(STORAGE_KEY, t); }
+function clearMaster() { sessionStorage.removeItem(STORAGE_KEY); }
+
+// ── API 封装 ──
+async function api(method, path, body) {
+  const headers = { "Content-Type": "application/json" };
+  const master = getMaster();
+  if (master) headers["Authorization"] = `Bearer ${master}`;
+  const res = await fetch(path, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) {
+    // 鉴权失败 → 回锁屏
+    onAuthFail();
+    throw new Error("需要 master token");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+function onAuthFail() {
+  clearMaster();
+  showPanel(false);
+  $("lock-error").textContent = "Master token 无效或已失效";
+}
+
+function showPanel(unlocked) {
+  $("lock-screen").style.display = unlocked ? "none" : "block";
+  $("admin-panel").style.display = unlocked ? "block" : "none";
+}
+
+// ── 锁屏交互 ──
+$("master-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") $("unlock").click();
+});
+$("unlock").onclick = async () => {
+  const t = $("master-input").value.trim();
+  if (!t) { $("lock-error").textContent = "请输入 token"; return; }
+  $("lock-error").textContent = "";
+  setMaster(t);
+  try {
+    const data = await api("GET", "/api/tokens");
+    $("who").textContent = `已解锁: ${t.slice(0, 12)}...`;
+    showPanel(true);
+    renderTokens(data.tokens);
+  } catch (e) {
+    clearMaster();
+    $("lock-error").textContent = e.message;
+  }
+};
+$("lock-again").onclick = () => {
+  clearMaster();
+  $("master-input").value = "";
+  $("lock-error").textContent = "";
+  showPanel(false);
+};
+
+// ── 列表渲染 ──
+function fmtTime(iso) {
+  if (!iso) return "—";
+  try { return new Date(iso).toLocaleString("zh-CN", { hour12: false }); }
+  catch { return iso; }
+}
+
+function renderTokens(tokens) {
+  const tbody = $("token-tbody");
+  if (!tokens.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">暂无 token</td></tr>';
+    return;
+  }
+  tbody.innerHTML = tokens.map(t => {
+    const roleClass = `role-${t.role}`;
+    const statusClass = t.revoked ? "status-revoked" : "status-active";
+    const statusText = t.revoked ? "已吊销" : "活跃";
+    const canRevoke = !t.revoked;
+    return `
+      <tr>
+        <td>${esc(t.name)}</td>
+        <td><span class="role-badge ${roleClass}">${esc(t.role)}</span></td>
+        <td class="mono">${esc(t.prefix)}...</td>
+        <td>${fmtTime(t.created_at)}</td>
+        <td>${fmtTime(t.last_used_at)}</td>
+        <td><span class="${statusClass}">${statusText}</span></td>
+        <td class="actions">
+          <button class="ghost" data-act="rotate" data-id="${esc(t.id)}" data-name="${esc(t.name)}">轮换</button>
+          <button class="danger" data-act="revoke" data-id="${esc(t.id)}" data-name="${esc(t.name)}" ${canRevoke ? "" : "disabled"}>吊销</button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+  // 绑定行内操作
+  tbody.querySelectorAll("button[data-act]").forEach(btn => {
+    btn.onclick = () => onRowAction(btn.dataset.act, btn.dataset.id, btn.dataset.name);
+  });
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[c]);
+}
+
+// ── 行内操作 ──
+async function onRowAction(act, id, name) {
+  if (act === "revoke") {
+    if (!confirm(`确认吊销 token "${name}"?\n吊销后无法恢复,只能删除重建。`)) return;
+    try {
+      await api("DELETE", `/api/tokens/${id}`);
+      toast(`已吊销: ${name}`, "ok");
+      refreshList();
+    } catch (e) {
+      toast(`吊销失败: ${e.message}`, "error");
+    }
+  } else if (act === "rotate") {
+    if (!confirm(`确认轮换 token "${name}"?\n将生成新明文,旧明文立即失效。`)) return;
+    try {
+      const data = await api("POST", `/api/tokens/${id}/rotate`);
+      showSecretModal(data.secret, `轮换: ${name}`);
+      refreshList();
+    } catch (e) {
+      toast(`轮换失败: ${e.message}`, "error");
+    }
+  }
+}
+
+async function refreshList() {
+  try {
+    const data = await api("GET", "/api/tokens");
+    renderTokens(data.tokens);
+  } catch (e) {
+    toast(`刷新失败: ${e.message}`, "error");
+  }
+}
+$("refresh").onclick = refreshList;
+
+// ── 新建表单 ──
+$("new-btn").onclick = () => {
+  $("new-form").style.display = "block";
+  $("new-name").value = "";
+  $("new-err").textContent = "";
+  $("new-name").focus();
+};
+$("new-cancel").onclick = () => { $("new-form").style.display = "none"; };
+$("new-submit").onclick = async () => {
+  const name = $("new-name").value.trim();
+  const role = $("new-role").value;
+  if (!name) { $("new-err").textContent = "请输入名称"; return; }
+  $("new-err").textContent = "";
+  try {
+    const data = await api("POST", "/api/tokens", { name, role });
+    $("new-form").style.display = "none";
+    showSecretModal(data.secret, `新建: ${name} (${role})`);
+    refreshList();
+  } catch (e) {
+    $("new-err").textContent = e.message;
+  }
+};
+
+// ── 一次性 Secret Modal ──
+function showSecretModal(secret, label) {
+  $("secret-value").textContent = secret;
+  $("secret-modal").classList.add("show");
+  $("secret-modal").dataset.label = label;
+}
+$("copy-secret").onclick = async () => {
+  const text = $("secret-value").textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("已复制到剪贴板", "ok");
+  } catch {
+    // 旧浏览器降级
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    toast("已复制", "ok");
+  }
+};
+$("ack-secret").onclick = () => {
+  $("secret-value").textContent = "";  // 物理清空 DOM
+  $("secret-modal").classList.remove("show");
+};
+
+// ── Toast ──
+function toast(text, kind = "ok") {
+  const el = document.createElement("div");
+  el.className = `toast ${kind}`;
+  el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ── 启动:有缓存的 master 就直接进 ──
+if (getMaster()) {
+  (async () => {
+    try {
+      const data = await api("GET", "/api/tokens");
+      $("who").textContent = `已解锁: ${getMaster().slice(0, 12)}...`;
+      showPanel(true);
+      renderTokens(data.tokens);
+    } catch {
+      showPanel(false);
+    }
+  })();
+}
+</script>
+</body>
+</html>

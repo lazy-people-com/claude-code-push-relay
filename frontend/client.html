@@ -142,6 +142,21 @@
     color: var(--muted);
     margin-top: 4px;
   }
+  .msg-badges { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #333;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .badge-host { background: #1e3a8a; color: #93c5fd; }
+  .badge-tool { background: #78350f; color: #fbbf24; }
+  .badge-stop-completed   { background: #14532d; color: var(--accent); }
+  .badge-stop-error       { background: #7f1d1d; color: var(--err); }
+  .badge-stop-interrupted { background: #4b5563; color: #d1d5db; }
+  .msg-task { font-size: 12px; color: var(--muted); margin-top: 4px; }
   @keyframes slideIn {
     from { opacity: 0; transform: translateX(-10px); }
     to { opacity: 1; transform: translateX(0); }
@@ -258,24 +273,45 @@ function renderMessage(data) {
   const main = $("messages");
   if (main.querySelector(".empty")) main.innerHTML = "";
 
-  const ts = data.timestamp || new Date().toISOString();
-  const src = data.source || "?";
-  const typ = data.type || "notification";
-  const content = data.content || JSON.stringify(data);
+  // 时区本地化:用 Date 解析 ISO(含时区偏移),再 toLocaleString 转本地
+  let localTime = data.timestamp || "";
+  try {
+    localTime = new Date(data.timestamp || Date.now())
+      .toLocaleString("zh-CN", { hour12: false });
+  } catch (_) { /* 保留原始 */ }
+
+  const src      = data.source || "?";
+  const typ      = data.type    || "notification";
+  const content  = data.content || "";
+  const host     = data.host    || "";
+  const tool     = data.tool    || "";
+  const toolIn   = data.tool_input || "";
+  const task     = data.task    || "";
+  const stopRea  = data.stop_reason || "";
+
+  // 徽章:主机 / 工具 / 停止原因(各自独立维度,只显示有值的)
+  const badges = [
+    host    && `<span class="badge badge-host">🖥 ${escapeHtml(host)}</span>`,
+    tool    && `<span class="badge badge-tool">🔧 ${escapeHtml(tool)}</span>`,
+    stopRea && `<span class="badge badge-stop-${escapeHtml(stopRea)}">${escapeHtml(stopRea)}</span>`,
+  ].filter(Boolean).join(" ");
 
   const div = document.createElement("div");
   div.className = `msg ${typ}`;
   div.innerHTML = `
     <div class="msg-head">
       <span class="msg-type">${escapeHtml(typ)}</span>
-      <span class="msg-time">${escapeHtml(ts)}</span>
+      <span class="msg-time">${escapeHtml(localTime)}</span>
     </div>
     <div class="msg-content">${escapeHtml(content)}</div>
+    ${badges ? `<div class="msg-badges">${badges}</div>` : ""}
+    ${toolIn ? `<div class="msg-task">⚙️ ${escapeHtml(toolIn)}</div>` : ""}
+    ${task && task !== content ? `<div class="msg-task">📋 ${escapeHtml(task)}</div>` : ""}
     <div class="msg-source">来源: ${escapeHtml(src)}</div>
   `;
   main.prepend(div);
 
-  // 限流：保留最近 200 条
+  // 限流:保留最近 200 条
   while (main.children.length > 200) main.removeChild(main.lastChild);
 }
 
@@ -286,6 +322,19 @@ function escapeHtml(s) {
 }
 
 // 连接
+let reconnectTimer = null;
+let reconnectDelay = 1000;  // 指数退避起点
+
+function scheduleReconnect() {
+  if (reconnectTimer) return;
+  if (!$("uri").value || !$("token").value) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connect();
+  }, reconnectDelay);
+  reconnectDelay = Math.min(reconnectDelay * 2, 30000);  // 1s → 2s → ... → 30s 上限
+}
+
 function connect() {
   if (ws && ws.readyState === WebSocket.OPEN) return;
   saveConfig();
@@ -301,6 +350,7 @@ function connect() {
     ws = new WebSocket(uri);
   } catch (e) {
     setStatus("error", "连接失败: " + e.message);
+    scheduleReconnect();
     return;
   }
 
@@ -308,16 +358,19 @@ function connect() {
     setStatus("connected", "已连接");
     $("connect").disabled = true;
     $("disconnect").disabled = false;
+    reconnectDelay = 1000;  // 成功后重置退避
   };
   ws.onclose = (e) => {
     let msg = "已断开";
-    if (e.code === 1006) msg = "连接异常（证书未信任？服务器不可达？）";
+    if (e.code === 1006) msg = "连接异常(证书未信任?服务器不可达?)";
     else if (e.code === 1008) msg = "连接策略违规";
-    else if (e.code >= 4000) msg = `服务器拒绝（HTTP ${e.code}，可能是 Token 错误）`;
+    else if (e.code >= 4000) msg = `服务器拒绝(HTTP ${e.code}, 可能是 Token 错误)`;
     setStatus("error", msg + (e.code ? ` [${e.code}]` : ""));
     $("connect").disabled = false;
     $("disconnect").disabled = true;
     ws = null;
+    // 自动重连(指数退避)
+    scheduleReconnect();
   };
   ws.onerror = () => setStatus("error", "连接错误");
   ws.onmessage = (ev) => {
@@ -328,17 +381,28 @@ function connect() {
     messageCount++;
     $("count").textContent = messageCount;
     playBeep();
-    showNotification(
-      `[${data.type || "notification"}] ${data.source || ""}`,
-      data.content || ""
-    );
+    // 通知文案:带 type + host + tool
+    const notifTitle = [
+      data.type || "notification",
+      data.host && `🖥 ${data.host}`,
+      data.tool && `🔧 ${data.tool}`,
+    ].filter(Boolean).join(" · ");
+    showNotification(notifTitle, data.content || "");
     flashTitle(data.type || "新消息");
   };
 }
 
 function disconnect() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   if (ws) ws.close();
 }
+
+// 浏览器 tab 切回前台时,若已断开则主动重连
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && (!ws || ws.readyState !== WebSocket.OPEN)) {
+    if ($("uri").value && $("token").value) scheduleReconnect();
+  }
+});
 
 function clearMessages() {
   $("messages").innerHTML = '<div class="empty">已清空</div>';

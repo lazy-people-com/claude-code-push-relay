@@ -5,38 +5,48 @@
 ## 架构
 
 ```
-┌─────────────────────┐   HTTPS POST /notify    ┌────────────────────┐
-│  Claude Code (hook) │ ───────────────────────▶│                    │
-└─────────────────────┘                          │  ycj  (后端)       │
-                                                │  push-relay-server │
-┌─────────────────────┐   WSS (TLS + Token)     │  WSS 监听 443      │
-│  本机终端 (client)  │ ◀───────────────────────│                    │
-│  本机浏览器 (网页)  │                          └────────────────────┘
+┌─────────────────────┐   HTTPS POST /api/notify   ┌────────────────────┐
+│  Claude Code (hook) │ ─────────────────────────▶ │                    │
+│  + notify.sh        │                            │  ycj  (后端)       │
+└─────────────────────┘                            │  push-relay-server │
+                                                  │  HTTP 监听 8080    │
+┌─────────────────────┐   WSS (TLS + Token)        │  (nginx 反代 443)  │
+│  本机终端 client.py │ ◀──────────────────────── │                    │
+│  本机浏览器 html    │                            └────────────────────┘
+│  /admin 管理 token  │
 └─────────────────────┘
 ```
+
+## 核心特性
+
+- **多 token + master 鉴权** — `Argon2id` 摘要存储，明文只显示一次
+- **/admin 管理页面** — 创建/吊销/轮换 token，需 master 鉴权
+- **WebSocket 心跳** — 服务端 30s ping，浏览器自动重连，告别 Cloudflare 100s 断连
+- **通知字段丰富** — 主机 / 工具 / 工具入参 / 任务 / 停止原因
+- **时区本地化** — ISO 8601 带偏移，客户端按本地时区显示
+- **向后兼容** — 老单 token 文件 + PUSH_TOKEN 环境变量自动迁移
 
 ## 目录结构
 
 ```
 push-relay/
 ├── backend/                    # 后端（部署到 ycj）
-│   ├── server.py               # aiohttp WebSocket relay
-│   ├── requirements.txt        # Python 依赖
+│   ├── server.py               # aiohttp WebSocket relay + Token 管理 API
+│   ├── requirements.txt        # Python 依赖: aiohttp, websockets, argon2-cffi
 │   ├── ecosystem.config.cjs    # pm2 配置
-│   ├── cert.pem                # 自签证书（含 SAN IP）
-│   ├── key.pem                 # 证书私钥
-│   ├── token                   # 认证 token（自动生成）
+│   ├── tokens.json             # Token 存储（Argon2id 摘要，无明文）
 │   └── logs/                   # pm2 日志
-├── frontend/                   # 前端（跑在本机）
-│   ├── client.html             # 网页版（含浏览器通知）
-│   ├── client.py               # 终端版
-│   ├── serve.js                # Node 静态服务（pm2 跑）
-│   ├── ecosystem.config.cjs    # pm2 配置
-│   ├── ycj-cert.pem            # ycj 证书副本（已装到本机钥匙串）
-│   └── logs/                   # pm2 日志
+├── frontend/                   # 前端
+│   ├── client.html             # 网页接收端（自动重连 + 通知 + 徽章）
+│   ├── client.py               # 终端接收端
+│   ├── admin.html              # Token 管理页面
+│   └── notify.sh               # Claude Code hook 脚本
+├── deploy/                     # 部署
+│   ├── install.sh              # ycj 一键部署
+│   └── nginx.conf              # nginx 反代 + 限流 + 静态文件
 └── docs/                       # 文档
-    ├── README.md               # 详细文档（部署/配置/systemd）
-    └── USAGE.md                # 速查（3 步使用）
+    ├── README.md               # 详细文档
+    └── USAGE.md                # 速查
 ```
 
 ## 部署状态
@@ -53,14 +63,14 @@ push-relay/
 # 1. 看后端是否活着
 ssh ycj 'pm2 status'
 
-# 2. 看前端是否活着
-pm2 status
+# 2. 浏览器打开接收端
+open https://yangchenjie.com/
 
-# 3. 浏览器打开
-open http://localhost:8080
-
-# 4. 或终端版
+# 3. 或终端版
 python3 ~/Desktop/push-relay/frontend/client.py
+
+# 4. 管理 token
+open https://yangchenjie.com/admin
 ```
 
 详细文档看 `docs/USAGE.md`（速查）和 `docs/README.md`（完整）。

@@ -1,7 +1,11 @@
 # 证书和密钥（敏感！）
+*.pem
+*.key
 backend/cert.pem
 backend/key.pem
 backend/token
+backend/tokens.json
+backend/.master-once
 
 # 日志
 backend/logs/

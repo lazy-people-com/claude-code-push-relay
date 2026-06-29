@@ -113,15 +113,74 @@ curl -k -X POST "https://47.120.30.150:443/notify?token=$PUSH_TOKEN" \
 
 ## 消息格式
 
-**Server 接收**：
+**Server 接收**（POST /api/notify）：
 ```json
-{ "source": "claude-code", "type": "notification", "content": "..." }
+{
+  "source":      "claude-code",
+  "type":        "tool-use" | "stop" | "notification",
+  "content":     "...",
+  "host":        "my-mac.local",       // 来源主机
+  "tool":        "Bash",               // 工具名
+  "tool_input":  "ls -la",             // 工具入参（≤200 字符）
+  "task":        "重构 token 系统",     // 详细任务
+  "stop_reason": "completed"           // completed | error | interrupted
+}
 ```
 
-**Server 推送**（自动加 timestamp）：
+**Server 推送**（WebSocket，自动加 timestamp）：
 ```json
-{ "timestamp": "...", "source": "...", "type": "...", "content": "..." }
+{
+  "timestamp":   "2026-06-29T18:30:15+08:00",  // ISO 8601 带时区
+  "source":      "claude-code",
+  "type":        "tool-use",
+  "content":     "工具调用: Bash",
+  "host":        "my-mac.local",
+  "tool":        "Bash",
+  "tool_input":  "ls -la",
+  "task":        "",
+  "stop_reason": ""
+}
 ```
+
+## Token 系统
+
+### 角色
+- **master** — 全局唯一,管理 token(创建/吊销/轮换)、访问 /admin 页面
+- **user** — 多个,可推送通知、可作为 WebSocket 接收端
+
+### 存储
+- 文件：`backend/tokens.json`（chmod 600，原子写入）
+- 摘要算法：**Argon2id**（`argon2-cffi`，默认参数 m=65536, t=3, p=4）
+- 明文**永不落盘** — 创建时只在响应里返回一次
+
+### Token 格式
+`pr_<role>_<24 字节 url-safe base64>`，例如：
+- `pr_master_cDhyxsA2IYFHL3GcKK6tzlvxBsC0yVYG`
+- `pr_user_a8f3b2c1d4e5f6g7h8j9k0l1m2n3p4q5r6s7t8`
+
+### 管理 API（均需 master token）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/tokens` | 列出所有 token（无明文/无摘要） |
+| POST | `/api/tokens` | 创建 token，响应里**唯一一次**返回明文 |
+| GET | `/api/tokens/{id}` | 单条详情 |
+| DELETE | `/api/tokens/{id}` | 吊销（最后 1 个 master 不可吊销 → 409） |
+| POST | `/api/tokens/{id}/rotate` | 轮换，响应里返回新明文 |
+
+所有 admin 端点经 nginx `limit_req` 限流（5 r/s, burst 10）。
+
+### 兼容性
+- 老 `backend/token` 单文件首次启动时自动迁移为 `user` role
+- `PUSH_TOKEN` 环境变量作为 `user` 注入（不落盘，重启仍有效）
+
+## WebSocket 心跳
+
+- server 端：`WebSocketResponse(heartbeat=30.0)` — 每 30s 自动发 ping
+- browser 端：自动重连（指数退避 1s → 30s 上限）+ `visibilitychange` 处理
+- Python 端：`ping_interval=20, ping_timeout=20`
+
+这样保证 Cloudflare 100s 空闲超时永远不触发。
 
 ## 持久化运行（systemd）
 

@@ -32,9 +32,10 @@ echo ""
 echo "── 2. 部署前端静态文件 ──"
 mkdir -p "$WEB_DIR"
 cp "$APP_DIR/frontend/client.html" "$WEB_DIR/"
-cp "$APP_DIR/frontend/client.py" "$WEB_DIR/" 2>/dev/null || true
-cp "$APP_DIR/frontend/ycj-cert.pem" "$WEB_DIR/" 2>/dev/null || true
-chmod 644 "$WEB_DIR"/*
+cp "$APP_DIR/frontend/admin.html" "$WEB_DIR/"
+cp "$APP_DIR/frontend/notify.sh" "$WEB_DIR/"
+chmod 755 "$WEB_DIR/notify.sh"
+chmod 644 "$WEB_DIR"/*.html
 echo "  ✓ 前端文件复制到 $WEB_DIR"
 ls -la "$WEB_DIR"
 echo ""
@@ -56,6 +57,10 @@ echo ""
 
 # 5. 启动 push-relay（监听 8080）
 echo "── 5. 重启 push-relay（监听 8080） ──"
+# 5a. 装/更新 Python 依赖
+pip3 install -q -r "$APP_DIR/backend/requirements.txt"
+echo "  ✓ Python 依赖已安装 (aiohttp, websockets, argon2-cffi)"
+# 5b. 启动 pm2
 export PORT=8080
 export HOST=127.0.0.1
 pm2 delete push-relay-backend 2>/dev/null || true
@@ -71,8 +76,13 @@ echo "  部署完成"
 echo "═══════════════════════════════════════════════════════"
 echo ""
 echo "访问入口："
-echo "  浏览器: https://yangchenjie.com/  (经 Cloudflare)"
-echo "  健康检查: curl http://127.0.0.1:8080/api/health"
+echo "  浏览器:    https://yangchenjie.com/         (经 Cloudflare)"
+echo "  Admin:     https://yangchenjie.com/admin   (Token 管理)"
+echo "  健康检查:  curl http://127.0.0.1:8080/api/health"
+echo ""
+echo "⚠️  首次启动会生成 master token,查看日志获取:"
+echo "    pm2 logs push-relay-backend --nostream | grep MASTER"
+echo "    或读文件: cat $APP_DIR/backend/.master-once  (保存后请删除)"
 echo ""
 echo "端口状态："
 echo "  80    → nginx（Cloudflare 入口）"
