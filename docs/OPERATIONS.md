@@ -1,6 +1,6 @@
 # push-relay 运维命令
 
-> 服务部署在 ycj 上,前端静态文件 nginx 直接 serve。改代码后需 rsync + pm2 restart(后端)/ 直接 rsync(前端,nginx 自动加载)。
+> ycj 是 git 仓库（origin = `git@github.com:lazy-people-com/claude-code-push-relay.git`，deploy key read-only）。改完代码一律 `git push origin dev` + `ssh ycj 'cd /root/push-relay && bin/pull-and-deploy.sh'`，**不要**用 rsync / scp / cp 推。
 
 ## 服务启停
 
@@ -14,21 +14,13 @@ ssh ycj 'pm2 status'                                                  # 状态
 
 ## 改代码后重启
 
-**后端** (改了 `backend/server.py`):
+改完一律走 git + `bin/pull-and-deploy.sh`(脚本会 git pull + 同步前端到 nginx + pm2 restart):
 ```bash
-rsync -avz ~/Desktop/push-relay/backend/server.py ycj:/root/push-relay/backend/
-ssh ycj 'pm2 restart push-relay-backend'
+git commit -m "..." && git push origin dev
+ssh ycj 'cd /root/push-relay && bin/pull-and-deploy.sh'
 ```
 
-**前端** (改了 `frontend/client.html` / `admin.html` / `_common.css` / `_common.js`):
-```bash
-rsync -avz ~/Desktop/push-relay/frontend/client.html \
-              ~/Desktop/push-relay/frontend/admin.html  \
-              ~/Desktop/push-relay/frontend/_common.css \
-              ~/Desktop/push-relay/frontend/_common.js  \
-              ycj:/var/www/push-relay/
-# nginx 静态文件自动加载,无需 reload
-```
+老版的 `rsync` 同步方式已废弃 — ycj 现在是 git 仓库,手动 rsync 会被下次 deploy 覆盖,容易产生「改了不生效」的诡异状态。
 
 ## 看日志
 

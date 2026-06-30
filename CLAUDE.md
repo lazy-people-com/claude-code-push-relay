@@ -45,7 +45,7 @@ git commit -m "..." && git push origin dev
 ssh ycj 'cd /root/push-relay && bin/pull-and-deploy.sh'
 ```
 
-ycj deploy key 在 `~/.ssh/github_deploy`（read-only）。**不要手动 rsync**（会被 git 跟踪文件覆盖）。
+ycj deploy key 在 `~/.ssh/github_deploy`（read-only）。**改代码一律走 git,不用 rsync / scp / cp 推**（ycj 是 git 仓库,手动推会被下次 pull-and-deploy.sh 覆盖）。
 
 ## 加新字段（高发变更 — 必做 5 处）
 
@@ -80,6 +80,7 @@ server 端定义（`backend/server.py:WS_CLOSE_*`），客户端映射：
 ## 不要做
 
 - 不要把 `tokens.json` / `*.pem` / `.webhook-secret` / `id_rsa*` / `.env*` 加进 git（`.gitignore` DANGER 块已列；**删行即泄密**）
+- **不要用 `rsync` / `scp` / `cp` 把代码推到 ycj** —— ycj 是 git 仓库,改完一律 `git push origin dev` + `ssh ycj 'cd /root/push-relay && bin/pull-and-deploy.sh'`。手动推会被下一次 deploy 覆盖,产生「我以为改了但服务器没改」的诡异 bug
 - 不要在 ycj 上手动 vi 改 server.py 等被 git 跟踪的文件（下次 `pull-and-deploy.sh` 会覆盖）
 - 不要在新代码里写 `escapeHtml` / `esc` — 一律用 `_common.js:escHtml`
 - 不要把流程图画横向 (`flowchart LR`) — 倾向 TB（节点 ≥4 必 TB）

@@ -107,7 +107,7 @@ notify.sh 从 stdin 读 Claude Code 传的 JSON，自动提取 `hook_event_name`
 | `deploy/nginx.conf` | nginx 反代 + 限流 + 静态文件 |
 | `deploy/install.sh` | ycj 一键部署脚本 |
 | `docs/README.md` | 完整文档 (部署 / Claude Code 集成 / Token 系统) |
-| `docs/OPERATIONS.md` | 运维命令速查 (pm2 / rsync / 丢 master 怎么办) |
+| `docs/OPERATIONS.md` | 运维命令速查 (pm2 / git pull / 丢 master 怎么办) |
 | `docs/USAGE.md` | 本文件，速查 |
 
 ## 常见问题
