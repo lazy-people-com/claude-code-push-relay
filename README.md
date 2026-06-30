@@ -82,5 +82,6 @@ open https://yangchenjie.com/admin
 
 - [docs/README.md](docs/README.md) — 完整文档:部署、Claude Code 集成、Token 系统、WSS 协议
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — 运维命令速查:启停、改代码后重启、看日志、丢 master 怎么办
+- [docs/INSTALL.md](docs/INSTALL.md) — 全新环境从零部署清单
 - [docs/FIELDS.md](docs/FIELDS.md) — 消息字段说明
 - [docs/USAGE.md](docs/USAGE.md) — 速查:3 步使用 + 常见问题

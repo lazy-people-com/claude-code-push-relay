@@ -2,6 +2,8 @@
 
 通过长连接 (WSS, TLS 加密 + Token 认证) 把 Claude Code 的事件实时推送到本地终端/浏览器。
 
+> 全新环境从零部署：见 [docs/INSTALL.md](INSTALL.md)。
+
 ## 架构
 
 ```mermaid
