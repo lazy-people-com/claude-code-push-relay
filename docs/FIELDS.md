@@ -92,20 +92,14 @@ WSS 接收端收到的字段 (server 端 `NOTIFY_FIELDS` 白名单 + server 注�
 
 ### `session`
 - **类型**: string
-- **谁填**: 由 `frontend/capture-session.sh` 注入。PreToolUse/PostToolUse/Stop/Notification 这几种 hook 的 stdin **不会传** session 字段, 只有 `SessionStart` 钩子能拿到 `session_title`。`capture-session.sh` 是个 SessionStart 钩子, 捕获 stdin 里的 `session_title` (用户用 `claude --name "xxx"` 或 `/rename` 设置),通过 `env` 输出注入到后续 hook 的环境变量 `PUSHRELAY_SESSION`,notify.sh 读这个环境变量。
-- **值**: 用户用 `claude --name "my-session"` 设的名字 (或 `/rename my-session` 后的名字)
-- **其他情况**: 空字符串 (用户没装 capture-session.sh 时;装了但当前 session 没有 name 时)
+- **谁填**: notify.sh 从 stdin 的 `cwd` 字段取 `basename()` (项目目录最后一段),例如:
+  - `cwd=/Users/unkowny/Desktop/push-relay` → `session="push-relay"`
+  - `cwd=/Users/foo/projects/bar` → `session="bar"`
+- **为什么用 cwd 末段**: 方便多项目同时跑多个 Claude Code session 时区分是哪个项目
+  (多个 claude 进程在不同 cwd 下, 推送消息会带不同 session 名, 客户端一眼能区分)
+- **其他情况**: 空字符串 (cwd 字段缺失时,实际几乎不会发生)
 - **客户端**: 消息列表加 `🏷 <session>` 紫色徽章;详情弹窗独立一行
-- **接入方法** (用户需要主动配): 在 `~/.claude/settings.json` 的 `hooks.SessionStart` 加:
-  ```json
-  {
-    "hooks": [{
-      "type": "command",
-      "command": "bash /path/to/push-relay/frontend/capture-session.sh"
-    }]
-  }
-  ```
-  不配这个钩子, `session` 字段永远为空, **不影响现有功能**。
+- **无接入门槛**: 不需要配 SessionStart hook, 所有 hook 事件 stdin 都带 cwd, 直接生效
 
 ## 调试
 
@@ -141,6 +135,6 @@ server 端会注入 timestamp,按 token 路由给目标客户端。
 | tool_input | ✅ | ✅ | ✅ | ✅ |
 | task | ✅ | ✅ (仅 notification) | ✅ | ✅ |
 | stop_reason | ✅ | ✅ (仅 stop) | ✅ | ✅ |
-| session | ✅ | ✅ (读 PUSHRELAY_SESSION) | ✅ | ✅ |
+| session | ✅ | ✅ (取 cwd basename) | ✅ | ✅ |
 
 任何一处加了新字段都需要更新其他三处 + 这份文档。

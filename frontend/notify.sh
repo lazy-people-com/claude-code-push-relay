@@ -10,18 +10,16 @@
 #   Stop:                     { session_id, ..., stop_hook_active }
 #   Notification:             { session_id, ..., message, notification_type }
 #
-# session 字段:PreToolUse/PostToolUse/Stop/Notification 这几种 hook 不会传
-# session_title 字段(只有 SessionStart 传)。要拿名字,需要单独配一个
-# SessionStart 钩子 (frontend/capture-session.sh),把 session_title 注入到
-# PUSHRELAY_SESSION 环境变量,本脚本读这个变量。
+# session 字段: 从 stdin.cwd 取 basename() (项目目录最后一段),
+# 用来在多项目同时跑多个 Claude Code session 时区分是哪个项目。
+# cwd 是 hook 协议 Common input fields,所有事件都有。
 #
 # 用法: 在 ~/.claude/settings.json 的 hooks 里指向本脚本:
 #   "command": "/path/to/push-relay/frontend/notify.sh"
 # 所需依赖: bash, jq, curl (jq 用于解析 Claude Code 传过来的 JSON)
 # 环境变量:
-#   PUSH_URL          - 推送地址,默认 https://yangchenjie.com/api/notify
-#   PUSH_TOKEN        - token,从 ~/.zshrc 读取
-#   PUSHRELAY_SESSION - session 名称(由 capture-session.sh 注入)
+#   PUSH_URL    - 推送地址,默认 https://yangchenjie.com/api/notify
+#   PUSH_TOKEN  - token,从 ~/.zshrc 读取
 
 set -uo pipefail
 
@@ -39,6 +37,14 @@ fi
 # ── 解析 host ──
 HOST=$(hostname -s 2>/dev/null || hostname)
 [[ -z "$HOST" ]] && HOST="unknown"
+
+# ── 解析 cwd 末段(用于 session 字段,方便多项目区分) ──
+CWD=$(printf '%s' "$PAYLOAD" | jq -r '.cwd // ""')
+if [[ -n "$CWD" ]]; then
+  SESSION=$(basename "$CWD")
+else
+  SESSION=""
+fi
 
 # ── 解析事件类型 ──
 EVENT=$(printf '%s' "$PAYLOAD" | jq -r '.hook_event_name // "Notification"')
@@ -83,10 +89,6 @@ case "$EVENT" in
     TASK=""
     ;;
 esac
-
-# ── 读 session 名称(由 capture-session.sh 注入) ──
-# 用户没配 SessionStart 钩子时为空字符串,不影响现有功能
-SESSION="${PUSHRELAY_SESSION:-}"
 
 # ── 拼装最终 JSON ──
 JSON=$(jq -n \
