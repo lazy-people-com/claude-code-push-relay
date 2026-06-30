@@ -1,13 +1,35 @@
-# 证书和密钥（敏感！）
+# ═══════════════════════════════════════════════════════════════
+# ⚠️  敏感信息 DANGER — 下列文件一旦被 commit 进 git,
+#     任何能 pull 这个仓库的人(包括历史的 fork/clone)都能拿到。
+#     要提交新文件前先想清楚它是不是敏感信息。
+#     下列 pattern 是常见敏感文件, 不能删,只能加。
+# ═══════════════════════════════════════════════════════════════
+
+# 加密 / 认证材料
 *.pem
 *.key
+*.pem.csr
+.env
+.env.*
 backend/cert.pem
 backend/key.pem
-backend/token
-backend/tokens.json
-backend/.master-once
+backend/token           # 老版单 token 文件,首次启动会被自动迁移到 tokens.json
+backend/tokens.json     # master + user token 的 Argon2id 摘要,严禁外泄
+backend/.master-once    # master 明文一次性文件,首次启动生成,读完应立即删
+bin/.webhook-secret     # github webhook 共享 secret (auto-deploy 用)
 
-# 日志
+# ssh 私钥 (用户的 ~/.ssh 镜像如果误拷贝进项目,会被扫到)
+*id_rsa*
+*id_ed25519*
+*id_ecdsa*
+known_hosts
+
+# 数据库 / 本地配置
+*.sqlite
+*.sqlite3
+*.db
+
+# 日志 / 运行时产物
 backend/logs/
 *.log
 
@@ -17,7 +39,7 @@ __pycache__/
 *.pyo
 *.pyd
 
-# 系统文件
+# 编辑器 / 系统
 .DS_Store
 *.swp
 .idea/
@@ -26,3 +48,4 @@ __pycache__/
 # 临时文件
 *.tmp
 *.bak
+*.orig

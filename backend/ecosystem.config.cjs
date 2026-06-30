@@ -1,16 +1,19 @@
 /**
- * push-relay 后端 pm2 配置（内网 HTTP，由 nginx 反代对外）
- * 在 ycj 上跑：cd /root/push-relay/backend && pm2 start ecosystem.config.cjs
+ * push-relay pm2 配置（ycj 上跑）
+ *   cd /root/push-relay/backend && pm2 start ecosystem.config.cjs
  *
- * 监听：127.0.0.1:8080（仅内网，nginx 转发）
- * TLS：由 nginx 处理（外部 HTTPS）
+ * 包含两个进程：
+ *   push-relay-backend  — aiohttp WebSocket relay, 内网 127.0.0.1:8080
+ *   push-relay-webhook  — 收 github webhook, 触发自动部署 (内网 127.0.0.1:9000)
+ *
+ * nginx: 外部 443 进来, /api/* → 8080, /webhook → 9000
  *
  * 启动后：
- *   pm2 status              # 看状态
- *   pm2 logs push-relay-backend  # 看日志
- *   pm2 restart push-relay-backend  # 重启
- *   pm2 stop push-relay-backend    # 停止
- *   pm2 save && pm2 startup  # 开机自启（root 跑）
+ *   pm2 status
+ *   pm2 logs push-relay-backend
+ *   pm2 logs push-relay-webhook
+ *   pm2 restart all
+ *   pm2 save && pm2 startup  # 开机自启
  */
 module.exports = {
   apps: [
@@ -20,22 +23,37 @@ module.exports = {
       script: "server.py",
       interpreter: "python3",
       interpreter_args: "-u",
-      // 单实例
       instances: 1,
       exec_mode: "fork",
-      // 自动重启
       autorestart: true,
       max_restarts: 10,
       restart_delay: 5000,
-      // 日志
       out_file: __dirname + "/logs/out.log",
       error_file: __dirname + "/logs/error.log",
       merge_logs: true,
-      // 环境变量
       env: {
         HOST: "127.0.0.1",
         PORT: 8080,
-        // PUSH_TOKEN 优先级：环境变量 > token 文件；不写在这里，从文件读
+      },
+    },
+    {
+      name: "push-relay-webhook",
+      cwd: __dirname + "/..",  // 项目根 (/root/push-relay)
+      script: "bin/webhook-receiver.py",
+      interpreter: "python3",
+      interpreter_args: "-u",
+      instances: 1,
+      exec_mode: "fork",
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 5000,
+      out_file: __dirname + "/logs/webhook-out.log",
+      error_file: __dirname + "/logs/webhook-error.log",
+      merge_logs: true,
+      env: {
+        WEBHOOK_HOST: "127.0.0.1",
+        WEBHOOK_PORT: 9000,
+        REPO_DIR: __dirname + "/..",
       },
     },
   ],
