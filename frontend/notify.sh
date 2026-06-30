@@ -2,7 +2,7 @@
 # push-relay Claude Code hook 脚本
 #
 # 从 Claude Code hook stdin 读 JSON,组装 push-relay payload,curl 推送。
-# 提取 host / tool_name / tool_input / stop_reason / 详细 message。
+# 提取 host / tool_name / tool_input / stop_reason / 详细 message / session。
 #
 # stdin 格式参考 Claude Code hook 协议:
 #   PreToolUse / PostToolUse: { session_id, transcript_path, cwd, hook_event_name,
@@ -10,12 +10,18 @@
 #   Stop:                     { session_id, ..., stop_hook_active }
 #   Notification:             { session_id, ..., message, notification_type }
 #
+# session 字段:PreToolUse/PostToolUse/Stop/Notification 这几种 hook 不会传
+# session_title 字段(只有 SessionStart 传)。要拿名字,需要单独配一个
+# SessionStart 钩子 (frontend/capture-session.sh),把 session_title 注入到
+# PUSHRELAY_SESSION 环境变量,本脚本读这个变量。
+#
 # 用法: 在 ~/.claude/settings.json 的 hooks 里指向本脚本:
 #   "command": "/path/to/push-relay/frontend/notify.sh"
 # 所需依赖: bash, jq, curl (jq 用于解析 Claude Code 传过来的 JSON)
 # 环境变量:
-#   PUSH_URL    - 推送地址,默认 https://yangchenjie.com/api/notify
-#   PUSH_TOKEN  - token,从 ~/.zshrc 读取
+#   PUSH_URL          - 推送地址,默认 https://yangchenjie.com/api/notify
+#   PUSH_TOKEN        - token,从 ~/.zshrc 读取
+#   PUSHRELAY_SESSION - session 名称(由 capture-session.sh 注入)
 
 set -uo pipefail
 
@@ -78,6 +84,10 @@ case "$EVENT" in
     ;;
 esac
 
+# ── 读 session 名称(由 capture-session.sh 注入) ──
+# 用户没配 SessionStart 钩子时为空字符串,不影响现有功能
+SESSION="${PUSHRELAY_SESSION:-}"
+
 # ── 拼装最终 JSON ──
 JSON=$(jq -n \
   --arg source      "claude-code" \
@@ -88,7 +98,8 @@ JSON=$(jq -n \
   --arg tool_input  "$TOOL_INPUT" \
   --arg task        "$TASK" \
   --arg stop_reason "$STOP_REASON" \
-  '{source:$source, type:$type, content:$content, host:$host, tool:$tool, tool_input:$tool_input, task:$task, stop_reason:$stop_reason}')
+  --arg session     "$SESSION" \
+  '{source:$source, type:$type, content:$content, host:$host, tool:$tool, tool_input:$tool_input, task:$task, stop_reason:$stop_reason, session:$session}')
 
 # ── 推送(失败不中断 hook) ──
 # --noproxy '*' 绕过本机 HTTP 代理:避免 macOS 系统代理拦截 HTTPS 时 TLS 握手失败

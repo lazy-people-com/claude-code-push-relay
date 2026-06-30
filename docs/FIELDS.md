@@ -17,7 +17,8 @@ WSS 接收端收到的字段 (server 端 `NOTIFY_FIELDS` 白名单 + server 注�
   "tool":        "Bash",
   "tool_input":  "{\"command\":\"ls -la\"}",
   "task":        "",
-  "stop_reason": ""
+  "stop_reason": "",
+  "session":     "push-relay-debug"
 }
 ```
 
@@ -89,6 +90,23 @@ WSS 接收端收到的字段 (server 端 `NOTIFY_FIELDS` 白名单 + server 注�
 - **客户端**: 消息列表加 `⟶ <stop_reason>` 徽章 (completed = 绿 / interrupted = 灰 / 未来 error = 红);详情弹窗独立一行
 - **历史说明**: USAGE.md 写"stop_reason (completed / error / interrupted)" — **error 当前不会由 notify.sh 产生**。`error` 只在 server 端 _TEST_SCENARIOS 测试场景里有。要让 notify.sh 发 `error` 需要扩展 (例如 hook 失败时)。
 
+### `session`
+- **类型**: string
+- **谁填**: 由 `frontend/capture-session.sh` 注入。PreToolUse/PostToolUse/Stop/Notification 这几种 hook 的 stdin **不会传** session 字段, 只有 `SessionStart` 钩子能拿到 `session_title`。`capture-session.sh` 是个 SessionStart 钩子, 捕获 stdin 里的 `session_title` (用户用 `claude --name "xxx"` 或 `/rename` 设置),通过 `env` 输出注入到后续 hook 的环境变量 `PUSHRELAY_SESSION`,notify.sh 读这个环境变量。
+- **值**: 用户用 `claude --name "my-session"` 设的名字 (或 `/rename my-session` 后的名字)
+- **其他情况**: 空字符串 (用户没装 capture-session.sh 时;装了但当前 session 没有 name 时)
+- **客户端**: 消息列表加 `🏷 <session>` 紫色徽章;详情弹窗独立一行
+- **接入方法** (用户需要主动配): 在 `~/.claude/settings.json` 的 `hooks.SessionStart` 加:
+  ```json
+  {
+    "hooks": [{
+      "type": "command",
+      "command": "bash /path/to/push-relay/frontend/capture-session.sh"
+    }]
+  }
+  ```
+  不配这个钩子, `session` 字段永远为空, **不影响现有功能**。
+
 ## 调试
 
 测试时可以直接 `curl` 模拟:
@@ -123,5 +141,6 @@ server 端会注入 timestamp,按 token 路由给目标客户端。
 | tool_input | ✅ | ✅ | ✅ | ✅ |
 | task | ✅ | ✅ (仅 notification) | ✅ | ✅ |
 | stop_reason | ✅ | ✅ (仅 stop) | ✅ | ✅ |
+| session | ✅ | ✅ (读 PUSHRELAY_SESSION) | ✅ | ✅ |
 
 任何一处加了新字段都需要更新其他三处 + 这份文档。

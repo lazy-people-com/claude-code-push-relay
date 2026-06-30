@@ -89,12 +89,14 @@ async def main() -> None:
                 tool_in = data.get("tool_input", "")
                 task = data.get("task", "")
                 stop = data.get("stop_reason", "")
+                session = data.get("session", "")
 
-                # 拼接徽章: 主机 / 工具 / 停止原因(各自独立维度)
+                # 拼接徽章: 主机 / 工具 / 停止原因 / session(各自独立维度)
                 badges = []
                 if host: badges.append(f"🖥{host}")
                 if tool: badges.append(f"🔧{tool}")
                 if stop: badges.append(f"⟶{stop}")
+                if session: badges.append(f"🏷{session}")
                 badge_str = f" [{' '.join(badges)}]" if badges else ""
 
                 print(f"🔔 [{ts}] [{src}/{typ}]{badge_str} {content}", flush=True)

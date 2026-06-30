@@ -45,6 +45,7 @@ WS_CLOSE_INTERNAL  = 4400  # 服务器内部错误 (预留)
 NOTIFY_FIELDS = (
     "source", "type", "content",
     "host", "tool", "tool_input", "task", "stop_reason",
+    "session",  # 由 capture-session.sh 注入, 用户没配 SessionStart 钩子时为空
 )
 
 # 路径

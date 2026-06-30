@@ -106,6 +106,7 @@
   .badge-stop-completed   { background: #14532d; color: var(--accent); }
   .badge-stop-error       { background: #7f1d1d; color: var(--err); }
   .badge-stop-interrupted { background: #4b5563; color: #d1d5db; }
+  .badge-session          { background: #4c1d95; color: #c4b5fd; }
   .msg-task { font-size: 12px; color: var(--muted); margin-top: 4px; }
   @keyframes slideIn {
     from { opacity: 0; transform: translateX(-10px); }
@@ -610,12 +611,14 @@ function renderMessage(data) {
   const toolIn   = data.tool_input || "";
   const task     = data.task    || "";
   const stopRea  = data.stop_reason || "";
+  const session  = data.session || "";
 
-  // 徽章:主机 / 工具 / 停止原因(各自独立维度,只显示有值的)
+  // 徽章:主机 / 工具 / 停止原因 / session(各自独立维度,只显示有值的)
   const badges = [
     host    && `<span class="badge badge-host">🖥 ${escHtml(host)}</span>`,
     tool    && `<span class="badge badge-tool">🔧 ${escHtml(tool)}</span>`,
     stopRea && `<span class="badge badge-stop-${escHtml(stopRea)}">${escHtml(stopRea)}</span>`,
+    session && `<span class="badge badge-session">🏷 ${escHtml(session)}</span>`,
   ].filter(Boolean).join(" ");
 
   const div = document.createElement("div");
@@ -662,6 +665,7 @@ function showMessageDetail(data) {
     ["tool_input",   data.tool_input],   // 完整,不被 200 字符截断
     ["task",         data.task],
     ["stop_reason",  data.stop_reason],
+    ["session",      data.session],      // 由 capture-session.sh 注入, 未配时为空
     ["content",      data.content],
     ["timestamp (ISO)",     data.timestamp],
     ["timestamp (本地)",    localTime],
