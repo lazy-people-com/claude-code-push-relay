@@ -45,7 +45,28 @@ FRONTEND_DIR = Path(
 )
 
 # 当前所有连上的 WebSocket 接收端
-clients: set[web.WebSocketResponse] = set()
+#   key   = WebSocket 响应
+#   value = 该连接用的 token 记录 (含 id/role/name)
+# 按 token 路由:user 推送只送给同 token 的客户端 + 所有 master;
+#               master 推送给所有客户端 (含 user)。
+clients: dict[web.WebSocketResponse, dict] = {}
+
+
+def _route_targets(sender: dict | None) -> list[web.WebSocketResponse]:
+    """根据推送方 token 计算本条消息应该送到哪些 WS 客户端。
+
+    - sender=None: 兼容老逻辑,送全部
+    - sender 是 master: 送全部 (master 能看所有 token 的消息)
+    - sender 是 user:   只送同 token 的客户端 + 所有 master
+    """
+    if sender is None:
+        return list(clients.keys())
+    if sender["role"] == "master":
+        return list(clients.keys())
+    return [
+        ws for ws, rec in clients.items()
+        if rec["role"] == "master" or rec["id"] == sender["id"]
+    ]
 
 # Argon2 hasher(线程安全,verifier 自身无状态)
 _HASHER = PasswordHasher()
@@ -311,10 +332,10 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
     # heartbeat=30: 每 30s 自动发 ping,30s 内无 pong 则主动关
     ws = web.WebSocketResponse(heartbeat=30.0, autoclose=True)
     await ws.prepare(request)
-    clients.add(ws)
+    clients[ws] = record
     log(
         f"接收端连接: {request.remote} "
-        f"(role={record['role']}, name={record['name']}), "
+        f"(role={record['role']}, name={record['name']}, id={record['id']}), "
         f"当前共 {len(clients)} 个"
     )
     try:
@@ -324,7 +345,7 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
     except Exception as e:
         log(f"WebSocket 异常: {e}")
     finally:
-        clients.discard(ws)
+        clients.pop(ws, None)
         log(
             f"接收端断开 (code={ws.close_code}, reason={ws.reason!r}), "
             f"剩余 {len(clients)} 个"
@@ -391,8 +412,11 @@ async def _handle_ws_message(ws: web.WebSocketResponse, raw: str) -> None:
         await ws.send_str(json.dumps({"ok": False, "error": f"unknown scenario: {scenario}"}))
         return
 
-    if not clients:
-        await ws.send_str(json.dumps({"ok": False, "error": "没有接收端"}))
+    # 测试推送的发送方 = 该 WS 连接用的 token
+    sender = clients.get(ws)
+    targets = _route_targets(sender)
+    if not targets:
+        await ws.send_str(json.dumps({"ok": False, "error": "没有匹配的接收端 (按 token 路由后为空)"}))
         return
 
     payload = json.dumps(
@@ -404,12 +428,11 @@ async def _handle_ws_message(ws: web.WebSocketResponse, raw: str) -> None:
         },
         ensure_ascii=False,
     )
-    targets = list(clients)
     results = await asyncio.gather(
         *[c.send_str(payload) for c in targets], return_exceptions=True
     )
     sent = sum(1 for r in results if not isinstance(r, Exception))
-    log(f"测试推送 [{scenario}]: sent_to={sent}/{len(targets)}")
+    log(f"测试推送 [{sender['name'] if sender else '?'}/{scenario}]: sent_to={sent}/{len(targets)}")
     await ws.send_str(json.dumps({"ok": True, "scenario": scenario, "sent_to": sent}))
 
 
@@ -444,12 +467,12 @@ async def notify_handler(request: web.Request) -> web.Response:
     )
     log(f"推送 [{record['name']}]: {payload}")
 
-    if not clients:
+    targets = _route_targets(record)
+    if not targets:
         return web.json_response(
-            {"ok": False, "error": "没有连接的接收端"}, status=404
+            {"ok": False, "error": "没有匹配的接收端 (按 token 路由后为空)"}, status=404
         )
 
-    targets = list(clients)
     results = await asyncio.gather(
         *[c.send_str(payload) for c in targets], return_exceptions=True
     )
