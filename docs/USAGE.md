@@ -32,13 +32,7 @@ python3 ~/Desktop/push-relay/frontend/client.py
    📋 权限确认
 ```
 
-每条消息现在带：
-- **🖥 host** — 来源主机
-- **🔧 tool** — 使用的工具（Bash/Edit/Read 等）
-- **⚙️ tool_input** — 工具入参（前 200 字符）
-- **⟶ stop_reason** — 停止原因（completed / error / interrupted）
-- **📋 task** — 详细任务（Notification 事件）
-- **时间** — 本地时区
+每条消息字段详细说明见 [docs/FIELDS.md](FIELDS.md) (type / host / tool / tool_input / task / stop_reason / timestamp 等)。
 
 ### 3. 手动推消息（可选，调试用）
 
