@@ -108,7 +108,10 @@
     padding: 10px 14px;
     margin-bottom: 8px;
     animation: slideIn 0.3s ease-out;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
   }
+  .msg:hover { background: #2a2a2a; border-color: #555; }
   .msg.tool-use { border-left-color: #60a5fa; }
   .msg.stop { border-left-color: var(--accent); }
   .msg.notification { border-left-color: var(--warn); }
@@ -231,6 +234,60 @@
   }
   .test-row button { flex-shrink: 0; min-width: 70px; }
   .test-row.sent button { background: var(--accent); color: #111; }
+  /* ── 消息详情弹窗 ── */
+  .detail-panel { min-width: 560px; }
+  .detail-row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 8px 12px;
+    font-size: 12px;
+    margin-bottom: 6px;
+    align-items: baseline;
+  }
+  .detail-key {
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    text-align: right;
+  }
+  .detail-val {
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+  .detail-val.empty { color: var(--muted); font-style: italic; }
+  .detail-section-title {
+    font-size: 11px;
+    color: var(--muted);
+    margin: 14px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .detail-pre {
+    background: #111;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .detail-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .copy-flash {
+    background: var(--accent) !important;
+    color: #111 !important;
+  }
 </style>
 </head>
 <body>
@@ -295,6 +352,22 @@
         </div>
         <button class="primary test-btn">推送</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 消息详情弹窗 (动态填充,点消息列表项触发) -->
+<div id="msgDetailModal" class="modal" hidden>
+  <div class="modal-panel detail-panel">
+    <div class="modal-head">
+      <h2>📋 消息详情</h2>
+      <button id="closeDetail" class="danger">关闭</button>
+    </div>
+    <div id="detailBody"></div>
+    <div class="detail-section-title">Raw JSON</div>
+    <pre id="detailJson" class="detail-pre"></pre>
+    <div class="detail-actions">
+      <button id="copyJson" class="primary">复制 JSON</button>
     </div>
   </div>
 </div>
@@ -496,6 +569,7 @@ function renderMessage(data) {
 
   const div = document.createElement("div");
   div.className = `msg ${typ}`;
+  div.title = "点击查看完整详情";
   div.innerHTML = `
     <div class="msg-head">
       <span class="msg-type">${escapeHtml(typ)}</span>
@@ -507,10 +581,55 @@ function renderMessage(data) {
     ${task && task !== content ? `<div class="msg-task">📋 ${escapeHtml(task)}</div>` : ""}
     <div class="msg-source">来源: ${escapeHtml(src)}</div>
   `;
+  // 保存原始数据 + 绑定点击 → 弹窗
+  div._data = data;
+  div.onclick = (e) => {
+    // 避免用户在选中文本时误触(选中文本>0 个字符则不弹)
+    if (window.getSelection && window.getSelection().toString().length > 0) return;
+    showMessageDetail(data);
+  };
   main.prepend(div);
 
   // 限流:保留最近 200 条
   while (main.children.length > 200) main.removeChild(main.lastChild);
+}
+
+// 消息详情弹窗
+function showMessageDetail(data) {
+  if (!data) return;
+  // 本地化时间
+  let localTime = "(无)";
+  try {
+    localTime = new Date(data.timestamp || Date.now())
+      .toLocaleString("zh-CN", { hour12: false });
+  } catch (_) {}
+  const fields = [
+    ["type",         data.type],
+    ["source",       data.source],
+    ["host",         data.host],
+    ["tool",         data.tool],
+    ["tool_input",   data.tool_input],   // 完整,不被 200 字符截断
+    ["task",         data.task],
+    ["stop_reason",  data.stop_reason],
+    ["content",      data.content],
+    ["timestamp (ISO)",     data.timestamp],
+    ["timestamp (本地)",    localTime],
+  ];
+  const body = $("detailBody");
+  body.innerHTML = fields.map(([k, v]) => {
+    const empty = (v === undefined || v === null || v === "");
+    return `<div class="detail-row">
+      <div class="detail-key">${escapeHtml(k)}</div>
+      <div class="detail-val${empty ? " empty" : ""}">${empty ? "(空)" : escapeHtml(String(v))}</div>
+    </div>`;
+  }).join("");
+  // Raw JSON 原始 payload (服务器实际下发的)
+  $("detailJson").textContent = JSON.stringify(data, null, 2);
+  $("msgDetailModal").hidden = false;
+}
+
+function closeDetail() {
+  $("msgDetailModal").hidden = true;
 }
 
 function escapeHtml(s) {
@@ -637,8 +756,46 @@ $("closeTest").onclick = closeTest;
 $("testModal").addEventListener("click", e => {
   if (e.target.id === "testModal") closeTest();  // 点遮罩关闭
 });
+// 详情弹窗:点遮罩/关闭按钮/ESC 都关
+$("msgDetailModal").addEventListener("click", e => {
+  if (e.target.id === "msgDetailModal") closeDetail();
+});
+$("closeDetail").onclick = closeDetail;
+$("copyJson").onclick = () => {
+  const json = $("detailJson").textContent;
+  const btn  = $("copyJson");
+  const flash = (label) => {
+    btn.textContent = label;
+    btn.classList.add("copy-flash");
+    setTimeout(() => {
+      btn.textContent = "复制 JSON";
+      btn.classList.remove("copy-flash");
+    }, 1000);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(json).then(
+      () => flash("✓ 已复制"),
+      () => { fallbackCopy(json); flash("✓ 已复制"); }
+    );
+  } else {
+    fallbackCopy(json);
+    flash("✓ 已复制");
+  }
+};
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity  = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); } catch (_) {}
+  document.body.removeChild(ta);
+}
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && !$("testModal").hidden) closeTest();
+  if (e.key !== "Escape") return;
+  if (!$("testModal").hidden)      closeTest();
+  else if (!$("msgDetailModal").hidden) closeDetail();
 });
 // 服务器对测试请求的回执:{ok, scenario, sent_to} —— 弹一下让用户知道推了几台
 function handleTestAck(data) {
