@@ -35,6 +35,18 @@ NOTIFY_PATH = "/api/notify"
 HEALTH_PATH = "/api/health"
 TOKENS_PATH = "/api/tokens"
 
+# WSS 关闭码常量(44xx 段是 IANA 留给应用层使用的范围)
+# 客户端映射见 frontend/_common.js (describeCloseCode) + frontend/client.py
+WS_CLOSE_NO_AUTH   = 4401  # 缺 token / token 无效
+WS_CLOSE_NO_MASTER = 4403  # 需要 master 但不是 master (预留, 当前未触发)
+WS_CLOSE_INTERNAL  = 4400  # 服务器内部错误 (预留)
+
+# 通知 payload 白名单字段(只透传这些,其他字段丢弃;timestamp 由服务端注入)
+NOTIFY_FIELDS = (
+    "source", "type", "content",
+    "host", "tool", "tool_input", "task", "stop_reason",
+)
+
 # 路径
 BACKEND_DIR = Path(__file__).parent
 TOKENS_FILE = BACKEND_DIR / "tokens.json"
@@ -324,14 +336,17 @@ async def check_token_async(
 
 
 async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
+    # 先建立 WS 升级(成功),再校验 token;失败时发 close frame(code=4401)
+    # 这样客户端能拿到 4401 而不是 1006(协议升级失败的 close code)
+    ws = web.WebSocketResponse(heartbeat=30.0, autoclose=True)
+    await ws.prepare(request)
+
     record = await check_token_async(request)
     if record is None:
         log(f"WS 鉴权失败: {request.remote}")
-        return web.Response(status=401, text="Unauthorized")
+        await ws.close(code=WS_CLOSE_NO_AUTH)
+        return ws
 
-    # heartbeat=30: 每 30s 自动发 ping,30s 内无 pong 则主动关
-    ws = web.WebSocketResponse(heartbeat=30.0, autoclose=True)
-    await ws.prepare(request)
     clients[ws] = record
     log(
         f"接收端连接: {request.remote} "
@@ -436,6 +451,25 @@ async def _handle_ws_message(ws: web.WebSocketResponse, raw: str) -> None:
     await ws.send_str(json.dumps({"ok": True, "scenario": scenario, "sent_to": sent}))
 
 
+def _build_notify_payload(data: dict) -> str:
+    """构造标准化推送 payload(白名单字段 + 服务端注入 timestamp)。"""
+    fields = {k: data.get(k, "") for k in NOTIFY_FIELDS}
+    fields["timestamp"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    return json.dumps(fields, ensure_ascii=False)
+
+
+async def _broadcast_to_targets(payload: str, sender: dict) -> dict:
+    """按 token 路由广播给目标客户端,返回 {sent, total}。total=0 表示无匹配接收端。"""
+    targets = _route_targets(sender)
+    if not targets:
+        return {"sent": 0, "total": 0}
+    results = await asyncio.gather(
+        *[c.send_str(payload) for c in targets], return_exceptions=True
+    )
+    sent = sum(1 for r in results if not isinstance(r, Exception))
+    return {"sent": sent, "total": len(targets)}
+
+
 async def notify_handler(request: web.Request) -> web.Response:
     record = await check_token_async(request)
     if record is None:
@@ -450,34 +484,15 @@ async def notify_handler(request: web.Request) -> web.Response:
         body = await request.text()
         data = {"content": body}
 
-    # 透传新字段,缺省降级为 ""
-    payload = json.dumps(
-        {
-            "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
-            "source": data.get("source", "claude-code"),
-            "type": data.get("type", "notification"),
-            "content": data.get("content", ""),
-            "host": data.get("host", ""),
-            "tool": data.get("tool", ""),
-            "tool_input": data.get("tool_input", ""),
-            "task": data.get("task", ""),
-            "stop_reason": data.get("stop_reason", ""),
-        },
-        ensure_ascii=False,
-    )
+    payload = _build_notify_payload(data)
     log(f"推送 [{record['name']}]: {payload}")
 
-    targets = _route_targets(record)
-    if not targets:
+    result = await _broadcast_to_targets(payload, record)
+    if result["total"] == 0:
         return web.json_response(
             {"ok": False, "error": "没有匹配的接收端 (按 token 路由后为空)"}, status=404
         )
-
-    results = await asyncio.gather(
-        *[c.send_str(payload) for c in targets], return_exceptions=True
-    )
-    sent = sum(1 for r in results if not isinstance(r, Exception))
-    return web.json_response({"ok": True, "sent_to": sent, "total": len(targets)})
+    return web.json_response({"ok": True, **result})
 
 
 async def health_handler(request: web.Request) -> web.Response:
