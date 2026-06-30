@@ -4,17 +4,14 @@
 
 ## 架构
 
-```
-┌─────────────────────┐   HTTPS POST /api/notify   ┌────────────────────┐
-│  Claude Code (hook) │ ─────────────────────────▶ │                    │
-│  + notify.sh        │                            │  ycj  (后端)       │
-└─────────────────────┘                            │  push-relay-server │
-                                                  │  HTTP 监听 8080    │
-┌─────────────────────┐   WSS (TLS + Token)        │  (nginx 反代 443)  │
-│  本机终端 client.py │ ◀──────────────────────── │                    │
-│  本机浏览器 html    │                            └────────────────────┘
-│  /admin 管理 token  │
-└─────────────────────┘
+```mermaid
+flowchart LR
+    CC["Claude Code (hook)<br/>+ notify.sh"]
+    SRV["ycj 后端<br/>push-relay-server<br/>:8080 · nginx:443"]
+    CL["本机终端 client.py<br/>本机浏览器 html<br/>/admin 管理 token"]
+
+    CC -- "HTTPS POST /api/notify" --> SRV
+    SRV -- "WSS (TLS + Token)" --> CL
 ```
 
 ## 核心特性
