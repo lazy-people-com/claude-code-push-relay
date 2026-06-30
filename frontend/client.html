@@ -70,7 +70,12 @@
     background: var(--border);
     color: var(--text);
     border: none;
-    padding: 6px 14px;
+    padding: 0 14px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
     border-radius: 4px;
     cursor: pointer;
     font-size: 12px;
@@ -288,6 +293,48 @@
     background: var(--accent) !important;
     color: #111 !important;
   }
+  /* ── 设置弹窗 ── */
+  .settings-section-title {
+    font-size: 11px;
+    color: var(--muted);
+    margin: 16px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+  .settings-section-title:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+    margin-top: 4px;
+  }
+  .setting-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .setting-row .setting-desc {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: 4px;
+  }
+  .setting-row code {
+    background: #111;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    color: var(--accent);
+  }
+  .setting-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
 </style>
 </head>
 <body>
@@ -304,13 +351,7 @@
   <button id="connect" class="primary">连接</button>
   <button id="disconnect" class="danger" disabled>断开</button>
   <button id="clear">清空</button>
-  <label class="toggle"><input type="checkbox" id="soundToggle" checked>声音</label>
-  <label class="toggle"><input type="checkbox" id="notifyToggle" checked>桌面通知</label>
-  <label class="toggle"><input type="checkbox" id="flashToggle" checked>标题闪烁</label>
-  <button id="openTest" class="primary">🧪 测试</button>
-  <button id="fireTestNotif" hidden>测试通知</button>
-  <button id="grantNotif" class="primary" hidden>授权通知</button>
-  <span id="notifStatus" class="status error" hidden>通知权限未授权</span>
+  <button id="openSettings">⚙️ 设置</button>
 </div>
 
 <main id="messages">
@@ -318,43 +359,6 @@
     点 "连接" 开始接收。Token 来自 <code>~/.zshrc</code> 里的 <code>PUSH_TOKEN</code>。
   </div>
 </main>
-
-<!-- 测试弹窗 -->
-<div id="testModal" class="modal" hidden>
-  <div class="modal-panel">
-    <div class="modal-head">
-      <h2>🧪 消息测试</h2>
-      <button id="closeTest" class="danger">关闭</button>
-    </div>
-    <p class="modal-hint">
-      点 "推送" 后，服务器会合成一条对应类型的消息广播给所有接收端（含自己）。
-      用来验证声音/系统通知/UI 是否正常。
-    </p>
-    <div class="test-list">
-      <div class="test-row" data-scenario="tool-use">
-        <div class="test-info">
-          <div class="test-type">tool-use</div>
-          <div class="test-desc">模拟 Bash 工具调用（tool=Bash, tool_input=echo hello from test）</div>
-        </div>
-        <button class="primary test-btn">推送</button>
-      </div>
-      <div class="test-row" data-scenario="stop">
-        <div class="test-info">
-          <div class="test-type">stop</div>
-          <div class="test-desc">模拟 Claude Code 正常停止（stop_reason=completed）</div>
-        </div>
-        <button class="primary test-btn">推送</button>
-      </div>
-      <div class="test-row" data-scenario="notification">
-        <div class="test-info">
-          <div class="test-type">notification</div>
-          <div class="test-desc">模拟权限确认通知（task=需要用户授权）</div>
-        </div>
-        <button class="primary test-btn">推送</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- 消息详情弹窗 (动态填充,点消息列表项触发) -->
 <div id="msgDetailModal" class="modal" hidden>
@@ -372,6 +376,91 @@
   </div>
 </div>
 
+<!-- 设置弹窗 (通知方式 / 按 type 过滤 / 通知测试) -->
+<div id="settingsModal" class="modal" hidden>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <h2>⚙️ 设置</h2>
+      <button id="closeSettings" class="danger">关闭</button>
+    </div>
+    <p class="modal-hint">
+      通知方式 = 全局开关;消息提醒 = 按 type 选择触发哪些方式。
+      关闭某类型后,该类型消息仍会显示在列表中,只是不响铃/不弹桌面通知/不标题闪烁。
+    </p>
+
+    <div class="settings-section-title">通知方式</div>
+    <label class="toggle setting-row">
+      <input type="checkbox" id="soundToggle" checked>
+      <span>声音</span>
+      <span class="setting-desc">消息到达时播放提示音</span>
+    </label>
+    <label class="toggle setting-row">
+      <input type="checkbox" id="notifyToggle" checked>
+      <span>桌面通知</span>
+      <span class="setting-desc">系统级通知横幅(需浏览器授权)</span>
+    </label>
+    <label class="toggle setting-row">
+      <input type="checkbox" id="flashToggle" checked>
+      <span>标题闪烁</span>
+      <span class="setting-desc">未聚焦时标题显示 🔔 闪烁</span>
+    </label>
+
+    <div class="settings-section-title">消息提醒(按 type)</div>
+    <label class="toggle setting-row">
+      <input type="checkbox" data-notify-type="tool-use" checked>
+      <code>tool-use</code>
+      <span class="setting-desc">Claude Code 工具调用 (Bash/Edit/Read 等)</span>
+    </label>
+    <label class="toggle setting-row">
+      <input type="checkbox" data-notify-type="stop" checked>
+      <code>stop</code>
+      <span class="setting-desc">Claude Code 停止 (completed / interrupted / error)</span>
+    </label>
+    <label class="toggle setting-row">
+      <input type="checkbox" data-notify-type="notification" checked>
+      <code>notification</code>
+      <span class="setting-desc">权限请求 / 系统通知</span>
+    </label>
+
+    <div class="settings-section-title">通知测试</div>
+    <div class="setting-row-actions">
+      <button id="grantNotif" class="primary" hidden>授权通知</button>
+      <button id="fireTestNotif" hidden>测试通知</button>
+      <button id="openTest" class="primary">🧪 打开消息测试</button>
+      <span id="notifStatus" class="status error" hidden></span>
+    </div>
+    <div id="testPanel" hidden style="margin-top: 12px;">
+      <p class="modal-hint">
+        点 "推送" 后，服务器会合成一条对应类型的消息广播给所有接收端（含自己）。
+        用来验证声音/系统通知/UI 是否正常。
+      </p>
+      <div class="test-list">
+        <div class="test-row" data-scenario="tool-use">
+          <div class="test-info">
+            <div class="test-type">tool-use</div>
+            <div class="test-desc">模拟 Bash 工具调用（tool=Bash, tool_input=echo hello from test）</div>
+          </div>
+          <button class="primary test-btn">推送</button>
+        </div>
+        <div class="test-row" data-scenario="stop">
+          <div class="test-info">
+            <div class="test-type">stop</div>
+            <div class="test-desc">模拟 Claude Code 正常停止（stop_reason=completed）</div>
+          </div>
+          <button class="primary test-btn">推送</button>
+        </div>
+        <div class="test-row" data-scenario="notification">
+          <div class="test-info">
+            <div class="test-type">notification</div>
+            <div class="test-desc">模拟权限确认通知（task=需要用户授权）</div>
+          </div>
+          <button class="primary test-btn">推送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 const DEFAULT_URI = "wss://yangchenjie.com/api/ws";
@@ -383,12 +472,36 @@ let originalTitle = document.title;
 let flashInterval = null;
 
 // 配置持久化
+// pr.notifyTypes: JSON { "tool-use": bool, "stop": bool, "notification": bool }
+// 缺省全 true (首次打开 / 老数据 / 损坏的 JSON 都按全开处理)
+function loadNotifyTypes() {
+  let obj = {};
+  try { obj = JSON.parse(localStorage.getItem("pr.notifyTypes") || "{}") || {}; }
+  catch (_) { obj = {}; }
+  document.querySelectorAll("[data-notify-type]").forEach(cb => {
+    const t = cb.dataset.notifyType;
+    cb.checked = obj[t] !== false;  // 缺省 true
+  });
+}
+function saveNotifyTypes() {
+  const obj = {};
+  document.querySelectorAll("[data-notify-type]").forEach(cb => {
+    obj[cb.dataset.notifyType] = cb.checked;
+  });
+  localStorage.setItem("pr.notifyTypes", JSON.stringify(obj));
+}
+function isTypeEnabled(type) {
+  const cb = document.querySelector(`[data-notify-type="${type}"]`);
+  return cb ? cb.checked : true;  // 缺省 true
+}
+
 function loadConfig() {
   $("uri").value = localStorage.getItem("pr.uri") || DEFAULT_URI;
   $("token").value = localStorage.getItem("pr.token") || DEFAULT_TOKEN;
   $("soundToggle").checked = localStorage.getItem("pr.sound") !== "0";
   $("notifyToggle").checked = localStorage.getItem("pr.notify") !== "0";
   $("flashToggle").checked = localStorage.getItem("pr.flash") !== "0";
+  loadNotifyTypes();
 }
 function saveConfig() {
   localStorage.setItem("pr.uri", $("uri").value);
@@ -396,6 +509,7 @@ function saveConfig() {
   localStorage.setItem("pr.sound", $("soundToggle").checked ? "1" : "0");
   localStorage.setItem("pr.notify", $("notifyToggle").checked ? "1" : "0");
   localStorage.setItem("pr.flash", $("flashToggle").checked ? "1" : "0");
+  saveNotifyTypes();
 }
 
 // 提示音:Web Audio API 生成简单 beep
@@ -702,6 +816,9 @@ function connect() {
     renderMessage(data);
     messageCount++;
     $("count").textContent = messageCount;
+    // 按 type 过滤:关掉的 type 不触发任何提醒(声音/桌面/标题闪烁)
+    // 消息本体仍已在上面渲染到列表
+    if (!isTypeEnabled(data.type || "notification")) return;
     playBeep();
     // 通知文案:带 type + host + tool
     const notifTitle = [
@@ -749,13 +866,18 @@ $("grantNotif").onclick = () => {
 $("fireTestNotif").onclick = () => { ensureAudio(); fireTestNotification(); };
 
 // ── 测试弹窗 ──
-function openTest()  { $("testModal").hidden = false; }
-function closeTest() { $("testModal").hidden = true; }
-$("openTest").onclick = () => { ensureAudio(); openTest(); };
-$("closeTest").onclick = closeTest;
-$("testModal").addEventListener("click", e => {
-  if (e.target.id === "testModal") closeTest();  // 点遮罩关闭
-});
+function openTest()  {
+  $("testPanel").hidden = false;
+  $("openTest").textContent = "🧪 关闭消息测试";
+}
+function closeTest() {
+  $("testPanel").hidden = true;
+  $("openTest").textContent = "🧪 打开消息测试";
+}
+$("openTest").onclick = () => {
+  ensureAudio();
+  $("testPanel").hidden ? openTest() : closeTest();  // toggle
+};
 // 详情弹窗:点遮罩/关闭按钮/ESC 都关
 $("msgDetailModal").addEventListener("click", e => {
   if (e.target.id === "msgDetailModal") closeDetail();
@@ -792,9 +914,27 @@ function fallbackCopy(text) {
   try { document.execCommand("copy"); } catch (_) {}
   document.body.removeChild(ta);
 }
+
+// ── 设置弹窗 ──
+function openSettings()  { $("settingsModal").hidden = false; }
+function closeSettings() { $("settingsModal").hidden = true; }
+$("openSettings").onclick = () => { ensureAudio(); openSettings(); };
+$("closeSettings").onclick = closeSettings;
+$("settingsModal").addEventListener("click", e => {
+  if (e.target.id === "settingsModal") closeSettings();  // 点遮罩关闭
+});
+// 三个通知方式 toggle 变化时立即存
+["soundToggle", "notifyToggle", "flashToggle"].forEach(id => {
+  $(id).addEventListener("change", saveConfig);
+});
+// 三个 type checkbox 变化时立即存
+document.querySelectorAll("[data-notify-type]").forEach(cb => {
+  cb.addEventListener("change", saveNotifyTypes);
+});
+
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
-  if (!$("testModal").hidden)      closeTest();
+  if (!$("settingsModal").hidden)       closeSettings();
   else if (!$("msgDetailModal").hidden) closeDetail();
 });
 // 服务器对测试请求的回执:{ok, scenario, sent_to} —— 弹一下让用户知道推了几台
