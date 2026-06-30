@@ -91,7 +91,9 @@ JSON=$(jq -n \
   '{source:$source, type:$type, content:$content, host:$host, tool:$tool, tool_input:$tool_input, task:$task, stop_reason:$stop_reason}')
 
 # ── 推送(失败不中断 hook) ──
-curl -k -s -X POST "$PUSH_URL?token=$PUSH_TOKEN" \
+# --noproxy '*' 绕过本机 HTTP 代理:避免 macOS 系统代理拦截 HTTPS 时 TLS 握手失败
+#   (curl exit 35 = Recv failure: Connection reset by peer,|| true 会吞掉)
+curl --noproxy '*' -k -s -X POST "$PUSH_URL?token=$PUSH_TOKEN" \
   -H "Content-Type: application/json" \
   -d "$JSON" >/dev/null 2>&1 || true
 
