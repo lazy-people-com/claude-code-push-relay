@@ -4,35 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>push-relay</title>
+<link rel="stylesheet" href="_common.css">
+<script src="_common.js"></script>
 <style>
-  :root {
-    --bg: #1a1a1a;
-    --panel: #242424;
-    --border: #333;
-    --text: #e0e0e0;
-    --muted: #888;
-    --accent: #4ade80;
-    --warn: #fbbf24;
-    --err: #f87171;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* client.html 专用样式 — 通用部分见 _common.css */
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: var(--bg);
-    color: var(--text);
     height: 100vh;
     display: flex;
     flex-direction: column;
   }
-  header {
-    padding: 12px 20px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-  h1 { font-size: 16px; font-weight: 600; }
   .status {
     font-size: 12px;
     padding: 4px 10px;
@@ -47,45 +27,7 @@
     font-size: 12px;
     color: var(--muted);
   }
-  .toolbar {
-    padding: 10px 20px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  input[type="text"], input[type="password"] {
-    background: #111;
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 6px 10px;
-    border-radius: 4px;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: 12px;
-  }
   input[type="text"] { flex: 1; min-width: 280px; }
-  button {
-    background: var(--border);
-    color: var(--text);
-    border: none;
-    padding: 0 14px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-  }
-  button:hover:not(:disabled) { background: #444; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  button.primary { background: #166534; }
-  button.primary:hover:not(:disabled) { background: #15803d; }
-  button.danger { background: #7f1d1d; }
-  button.danger:hover:not(:disabled) { background: #991b1b; }
   label.toggle {
     display: inline-flex;
     align-items: center;
@@ -168,11 +110,6 @@
   @keyframes slideIn {
     from { opacity: 0; transform: translateX(-10px); }
     to { opacity: 1; transform: translateX(0); }
-  }
-  .flash { animation: flash 1s ease-out 3; }
-  @keyframes flash {
-    0%, 100% { background: var(--bg); }
-    50% { background: #422006; }
   }
   /* ── 测试弹窗 ── */
   .modal {
@@ -676,9 +613,9 @@ function renderMessage(data) {
 
   // 徽章:主机 / 工具 / 停止原因(各自独立维度,只显示有值的)
   const badges = [
-    host    && `<span class="badge badge-host">🖥 ${escapeHtml(host)}</span>`,
-    tool    && `<span class="badge badge-tool">🔧 ${escapeHtml(tool)}</span>`,
-    stopRea && `<span class="badge badge-stop-${escapeHtml(stopRea)}">${escapeHtml(stopRea)}</span>`,
+    host    && `<span class="badge badge-host">🖥 ${escHtml(host)}</span>`,
+    tool    && `<span class="badge badge-tool">🔧 ${escHtml(tool)}</span>`,
+    stopRea && `<span class="badge badge-stop-${escHtml(stopRea)}">${escHtml(stopRea)}</span>`,
   ].filter(Boolean).join(" ");
 
   const div = document.createElement("div");
@@ -686,14 +623,14 @@ function renderMessage(data) {
   div.title = "点击查看完整详情";
   div.innerHTML = `
     <div class="msg-head">
-      <span class="msg-type">${escapeHtml(typ)}</span>
-      <span class="msg-time">${escapeHtml(localTime)}</span>
+      <span class="msg-type">${escHtml(typ)}</span>
+      <span class="msg-time">${escHtml(localTime)}</span>
     </div>
-    <div class="msg-content">${escapeHtml(content)}</div>
+    <div class="msg-content">${escHtml(content)}</div>
     ${badges ? `<div class="msg-badges">${badges}</div>` : ""}
-    ${toolIn ? `<div class="msg-task">⚙️ ${escapeHtml(toolIn)}</div>` : ""}
-    ${task && task !== content ? `<div class="msg-task">📋 ${escapeHtml(task)}</div>` : ""}
-    <div class="msg-source">来源: ${escapeHtml(src)}</div>
+    ${toolIn ? `<div class="msg-task">⚙️ ${escHtml(toolIn)}</div>` : ""}
+    ${task && task !== content ? `<div class="msg-task">📋 ${escHtml(task)}</div>` : ""}
+    <div class="msg-source">来源: ${escHtml(src)}</div>
   `;
   // 保存原始数据 + 绑定点击 → 弹窗
   div._data = data;
@@ -733,8 +670,8 @@ function showMessageDetail(data) {
   body.innerHTML = fields.map(([k, v]) => {
     const empty = (v === undefined || v === null || v === "");
     return `<div class="detail-row">
-      <div class="detail-key">${escapeHtml(k)}</div>
-      <div class="detail-val${empty ? " empty" : ""}">${empty ? "(空)" : escapeHtml(String(v))}</div>
+      <div class="detail-key">${escHtml(k)}</div>
+      <div class="detail-val${empty ? " empty" : ""}">${empty ? "(空)" : escHtml(String(v))}</div>
     </div>`;
   }).join("");
   // Raw JSON 原始 payload (服务器实际下发的)
@@ -744,12 +681,6 @@ function showMessageDetail(data) {
 
 function closeDetail() {
   $("msgDetailModal").hidden = true;
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  })[c]);
 }
 
 // 连接
@@ -792,10 +723,7 @@ function connect() {
     reconnectDelay = 1000;  // 成功后重置退避
   };
   ws.onclose = (e) => {
-    let msg = "已断开";
-    if (e.code === 1006) msg = "连接异常(证书未信任?服务器不可达?)";
-    else if (e.code === 1008) msg = "连接策略违规";
-    else if (e.code >= 4000) msg = `服务器拒绝(HTTP ${e.code}, 可能是 Token 错误)`;
+    const msg = describeCloseCode(e.code);
     setStatus("error", msg + (e.code ? ` [${e.code}]` : ""));
     $("connect").disabled = false;
     $("disconnect").disabled = true;

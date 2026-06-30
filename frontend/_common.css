@@ -1,0 +1,68 @@
+/* push-relay 公共样式 — client.html / admin.html 共享
+   包含: 主题色变量 / 重置 / body / header / toolbar / input / button
+   两个页面 <head> 里 <link rel="stylesheet" href="_common.css"> 引入 */
+
+:root {
+  --bg: #1a1a1a;
+  --panel: #242424;
+  --border: #333;
+  --text: #e0e0e0;
+  --muted: #888;
+  --accent: #4ade80;
+  --warn: #fbbf24;
+  --err: #f87171;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+h1 { font-size: 16px; font-weight: 600; }
+header {
+  padding: 12px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.toolbar {
+  padding: 10px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+input[type="text"], input[type="password"] {
+  background: #111;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+}
+button {
+  background: var(--border);
+  color: var(--text);
+  border: none;
+  padding: 0 14px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+button:hover:not(:disabled) { background: #444; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.primary { background: #166534; color: #fff; }
+button.primary:hover:not(:disabled) { background: #15803d; }
+button.danger { background: #7f1d1d; color: #fff; }
+button.danger:hover:not(:disabled) { background: #991b1b; }
+button.ghost { background: transparent; border: 1px solid var(--border); }

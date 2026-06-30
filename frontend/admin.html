@@ -4,24 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>push-relay Admin</title>
+<link rel="stylesheet" href="_common.css">
+<script src="_common.js"></script>
 <style>
-  :root {
-    --bg: #1a1a1a;
-    --panel: #242424;
-    --border: #333;
-    --text: #e0e0e0;
-    --muted: #888;
-    --accent: #4ade80;
-    --warn: #fbbf24;
-    --err: #f87171;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
+  /* admin.html 专用样式 — 通用部分见 _common.css */
+  body { min-height: 100vh; }
   /* ── 锁屏 ── */
   #lock-screen {
     max-width: 420px;
@@ -39,52 +26,8 @@
 
   /* ── Admin 主面板 ── */
   #admin-panel { display: none; }
-  header {
-    padding: 12px 20px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-  h1 { font-size: 16px; font-weight: 600; }
   .who { font-size: 12px; color: var(--muted); margin-left: auto; }
-
-  .toolbar {
-    padding: 12px 20px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  input[type="text"], input[type="password"] {
-    background: #111;
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 6px 10px;
-    border-radius: 4px;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: 12px;
-  }
   input[type="text"] { flex: 1; min-width: 200px; }
-  button {
-    background: var(--border);
-    color: var(--text);
-    border: none;
-    padding: 6px 14px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-  }
-  button:hover:not(:disabled) { background: #444; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  button.primary { background: #166534; color: #fff; }
-  button.primary:hover:not(:disabled) { background: #15803d; }
-  button.danger { background: #7f1d1d; color: #fff; }
-  button.danger:hover:not(:disabled) { background: #991b1b; }
-  button.ghost { background: transparent; border: 1px solid var(--border); }
 
   main { padding: 16px 20px; }
 
@@ -107,7 +50,7 @@
     letter-spacing: 0.5px;
   }
   td.mono, th.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
-  td .role-badge {
+  .role-master, .role-user {
     display: inline-block;
     font-size: 10px;
     padding: 1px 6px;
@@ -359,15 +302,15 @@ function renderTokens(tokens) {
     const canRevoke = !t.revoked;
     return `
       <tr>
-        <td>${esc(t.name)}</td>
-        <td><span class="role-badge ${roleClass}">${esc(t.role)}</span></td>
-        <td class="mono">${esc(t.prefix)}...</td>
+        <td>${escHtml(t.name)}</td>
+        <td><span class="${roleClass}">${escHtml(t.role)}</span></td>
+        <td class="mono">${escHtml(t.prefix)}...</td>
         <td>${fmtTime(t.created_at)}</td>
         <td>${fmtTime(t.last_used_at)}</td>
         <td><span class="${statusClass}">${statusText}</span></td>
         <td class="actions">
-          <button class="ghost" data-act="rotate" data-id="${esc(t.id)}" data-name="${esc(t.name)}">轮换</button>
-          <button class="danger" data-act="revoke" data-id="${esc(t.id)}" data-name="${esc(t.name)}" ${canRevoke ? "" : "disabled"}>吊销</button>
+          <button class="ghost" data-act="rotate" data-id="${escHtml(t.id)}" data-name="${escHtml(t.name)}">轮换</button>
+          <button class="danger" data-act="revoke" data-id="${escHtml(t.id)}" data-name="${escHtml(t.name)}" ${canRevoke ? "" : "disabled"}>吊销</button>
         </td>
       </tr>
     `;
@@ -378,11 +321,7 @@ function renderTokens(tokens) {
   });
 }
 
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  })[c]);
-}
+// escHtml 由 _common.js 提供
 
 // ── 行内操作 ──
 async function onRowAction(act, id, name) {
