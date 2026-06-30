@@ -56,8 +56,11 @@ push-relay/
 | 组件 | 位置 | 端口 | 进程管理 |
 |------|------|------|----------|
 | 后端 server | `ycj:/root/push-relay/backend/` | 8080 (内部) | pm2 (push-relay-backend) |
+| webhook receiver | `ycj:/root/push-relay/bin/` | 9000 (内部) | pm2 (push-relay-webhook) |
 | nginx 反代 | `ycj:/etc/nginx/conf.d/` | 443 (WSS/HTTPS) | 系统包自带 |
 | 前端静态文件 | `ycj:/var/www/push-relay/` | 由 nginx serve | - |
+
+> `git push origin dev` 后 github 会 POST 到 `https://yangchenjie.com/webhook`，ycj 上自动跑 `bin/pull-and-deploy.sh`。配法见 [docs/OPERATIONS.md](docs/OPERATIONS.md#自动部署-webhook)。
 
 ## 快速使用
 
